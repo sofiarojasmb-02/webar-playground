@@ -62,7 +62,7 @@ canvas {
 /* Cabecera / Banner Minimalista */
 header {
     position: absolute;
-    top: 15px;
+    top: calc(45px + env(safe-area-inset-top));
     left: 15px;
     right: 15px;
     display: flex;
@@ -149,7 +149,7 @@ header {
 /* Instrucciones para el usuario */
 #instructions-overlay {
     position: absolute;
-    top: 90px;
+    top: calc(135px + env(safe-area-inset-top));
     left: 50%;
     transform: translateX(-50%);
     background: rgba(13, 14, 45, 0.8);
@@ -599,7 +599,7 @@ body.ar-active #settings-button-container {
 /* Notificaciones visuales de error/info */
 #toast-notification {
     position: absolute;
-    top: 20px;
+    top: calc(50px + env(safe-area-inset-top));
     left: 50%;
     transform: translateX(-50%) translateY(-100px);
     background: rgba(239, 68, 68, 0.9);

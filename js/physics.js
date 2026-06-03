@@ -22,8 +22,8 @@ class PhysicsEngine {
      * @param {number} groundY - Coordenada Y del suelo sobre el que rebotar
      */
     startDrop(groundY = 0.0) {
-        this.groundY = groundY;
-        this.positionY = this.groundY + this.dropHeight;
+        this.groundY = isNaN(groundY) ? 0.0 : groundY;
+        this.positionY = this.groundY + (isNaN(this.dropHeight) ? 1.2 : this.dropHeight);
         this.velocityY = 0.0;
         this.isSimulating = true;
         console.log(`Físicas iniciadas. Altura de caída: ${this.positionY}m, Altura suelo: ${this.groundY}m`);
@@ -56,15 +56,33 @@ class PhysicsEngine {
     update(dt, onUpdate, onSettle) {
         if (!this.isSimulating) return;
 
+        // Validar delta time contra NaN o valores inválidos
+        if (isNaN(dt) || dt <= 0) return;
+
+        // Validar propiedades físicas críticas contra NaN
+        if (isNaN(this.gravity) || isNaN(this.elasticity) || isNaN(this.groundY)) {
+            console.warn("Propiedades del motor de físicas contienen NaN. Deteniendo simulación.");
+            this.stop();
+            return;
+        }
+
         // Limitar dt para evitar saltos drásticos por caídas de frames
         const maxDt = 0.1;
         const actualDt = Math.min(dt, maxDt);
+        if (isNaN(actualDt) || actualDt <= 0) return;
 
         // Integración de Euler
         // v = v + a * dt (gravedad hacia abajo, por tanto restamos)
         this.velocityY -= this.gravity * actualDt;
         // y = y + v * dt
         this.positionY += this.velocityY * actualDt;
+
+        // Evitar que la posición se convierta en NaN
+        if (isNaN(this.positionY) || isNaN(this.velocityY)) {
+            console.warn("Posición o velocidad física se convirtió en NaN. Deteniendo simulación.");
+            this.stop();
+            return;
+        }
 
         // Detección de colisión con el suelo (Y <= groundY)
         if (this.positionY <= this.groundY) {

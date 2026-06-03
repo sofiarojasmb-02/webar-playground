@@ -483,18 +483,27 @@ class WebARApp {
                     setTimeout(() => {
                         if (this.isDoubleTap || !this.activePointers[e.pointerId]) return;
                         
+                        const intersectPoint = intersects[0].point;
+                        if (!intersectPoint || isNaN(intersectPoint.x) || isNaN(intersectPoint.y) || isNaN(intersectPoint.z)) return;
+
                         this.isDragging = true;
                         this.controls.enabled = false; // Desactivar controles de cámara
                         this.physics.stop(); // Pausar físicas durante el arrastre
 
                         // Configurar el plano de arrastre horizontal y vertical orientado hacia la cámara
-                        const intersectPoint = intersects[0].point;
                         const camDir = new THREE.Vector3();
                         camera.getWorldDirection(camDir);
+                        if (isNaN(camDir.x) || isNaN(camDir.y) || isNaN(camDir.z)) {
+                            camDir.set(0, 0, -1);
+                        }
                         this.dragPlane.setFromNormalAndCoplanarPoint(camDir.negate(), intersectPoint);
                         
                         // Guardar la compensación entre el centro del modelo y el punto tocado
-                        this.dragOffset.copy(this.placedModel.position).sub(intersectPoint);
+                        if (!isNaN(this.placedModel.position.x) && !isNaN(this.placedModel.position.y) && !isNaN(this.placedModel.position.z)) {
+                            this.dragOffset.copy(this.placedModel.position).sub(intersectPoint);
+                        } else {
+                            this.dragOffset.set(0, 0, 0);
+                        }
 
                         // Auto-colapsar el panel para dejar ver la escena
                         const drawer = document.getElementById('control-drawer');
@@ -520,21 +529,25 @@ class WebARApp {
                 const p2 = this.activePointers[pointerIds[1]];
                 const currentDist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
                 
-                if (this.prevPinchDist > 0) {
+                if (this.prevPinchDist > 0 && !isNaN(this.prevPinchDist)) {
                     const ratio = currentDist / this.prevPinchDist;
-                    this.prevPinchDist = currentDist;
-                    
-                    // Modificar deformación Y
-                    this.currentDeformation = Math.max(0.4, Math.min(2.2, this.currentDeformation * ratio));
-                    
-                    // Sincronizar el deslizador de la UI
-                    const sliderDeform = document.getElementById('slider-deform');
-                    const valDeform = document.getElementById('val-deform');
-                    if (sliderDeform) sliderDeform.value = this.currentDeformation;
-                    if (valDeform) {
-                        const percent = ((this.currentDeformation - 1.0) * 100).toFixed(0);
-                        valDeform.textContent = this.currentDeformation >= 1.0 ? `+${percent}% (Estirar)` : `${percent}% (Comprimir)`;
+                    if (!isNaN(ratio) && isFinite(ratio) && ratio > 0) {
+                        this.prevPinchDist = currentDist;
+                        
+                        // Modificar deformación Y
+                        this.currentDeformation = Math.max(0.4, Math.min(2.2, this.currentDeformation * ratio));
+                        
+                        // Sincronizar el deslizador de la UI
+                        const sliderDeform = document.getElementById('slider-deform');
+                        const valDeform = document.getElementById('val-deform');
+                        if (sliderDeform) sliderDeform.value = this.currentDeformation;
+                        if (valDeform) {
+                            const percent = ((this.currentDeformation - 1.0) * 100).toFixed(0);
+                            valDeform.textContent = this.currentDeformation >= 1.0 ? `+${percent}% (Estirar)` : `${percent}% (Comprimir)`;
+                        }
                     }
+                } else {
+                    this.prevPinchDist = currentDist;
                 }
                 return;
             }
@@ -546,13 +559,16 @@ class WebARApp {
                 this.raycaster.setFromCamera(this.mouse, camera);
                 
                 const intersection = new THREE.Vector3();
-                this.raycaster.ray.intersectPlane(this.dragPlane, intersection);
+                const result = this.raycaster.ray.intersectPlane(this.dragPlane, intersection);
                 
-                // Mover el modelo
-                this.placedModel.position.copy(intersection).add(this.dragOffset);
-                
-                // Limitar al suelo
-                this.placedModel.position.y = Math.max(this.physics.groundY, this.placedModel.position.y);
+                if (result && !isNaN(intersection.x) && !isNaN(intersection.y) && !isNaN(intersection.z)) {
+                    // Mover el modelo
+                    this.placedModel.position.copy(intersection).add(this.dragOffset);
+                    
+                    // Limitar al suelo
+                    const floorY = isNaN(this.physics.groundY) ? 0.0 : this.physics.groundY;
+                    this.placedModel.position.y = Math.max(floorY, this.placedModel.position.y);
+                }
             }
         });
 
@@ -600,10 +616,15 @@ class WebARApp {
                     // Si tocamos el modelo: relanzar físicas (rebote) pero NO abrir panel de control
                     this.triggerBounceDrop();
                 } else {
-                    // Si no tocamos el modelo, y NO hay modelo colocado aún, lo colocamos en la retícula
-                    if (!this.placedModel && this.reticle.visible) {
+                    // Si no tocamos el modelo, colocamos/reposicionamos el modelo en la retícula
+                    if (this.reticle.visible) {
                         const position = new THREE.Vector3().setFromMatrixPosition(this.reticle.matrix);
-                        this.placeModel(position);
+                        // Validar contra valores NaN para evitar que el modelo desaparezca
+                        if (!isNaN(position.x) && !isNaN(position.y) && !isNaN(position.z)) {
+                            this.placeModel(position);
+                        } else {
+                            console.warn("Posición de la retícula contiene NaN, ignorando colocación.");
+                        }
                     }
                 }
             }
@@ -780,7 +801,7 @@ class WebARApp {
             const box = new THREE.Box3().setFromObject(object3d);
             const size = box.getSize(new THREE.Vector3());
             const maxDim = Math.max(size.x, size.y, size.z);
-            const scaleFactor = 0.4 / maxDim;
+            const scaleFactor = (maxDim > 0 && !isNaN(maxDim) && isFinite(maxDim)) ? (0.4 / maxDim) : 1.0;
             
             object3d.scale.setScalar(scaleFactor);
 
@@ -790,7 +811,7 @@ class WebARApp {
             
             // Creamos un contenedor raíz para ajustar el pivote Y a 0
             const containerGroup = new THREE.Group();
-            object3d.position.y = -lowestY;
+            object3d.position.y = (isNaN(lowestY) || !isFinite(lowestY)) ? 0.0 : -lowestY;
             containerGroup.add(object3d);
 
             this.setActiveModel(containerGroup);
@@ -1003,11 +1024,15 @@ class WebARApp {
                 }
             }
 
-            // 2. Si no toca el modelo, colocar en la retícula (solo si no se ha colocado aún en esta sesión AR)
-            if (!this.arModelPlaced && this.reticle.visible) {
+            // 2. Si no toca el modelo, colocar/reposicionar en la retícula
+            if (this.reticle.visible) {
                 const position = new THREE.Vector3().setFromMatrixPosition(this.reticle.matrix);
-                this.placeModel(position);
-                this.arModelPlaced = true;
+                // Validar contra valores NaN para evitar que el modelo desaparezca
+                if (!isNaN(position.x) && !isNaN(position.y) && !isNaN(position.z)) {
+                    this.placeModel(position);
+                } else {
+                    console.warn("Posición de la retícula en AR contiene NaN, ignorando colocación.");
+                }
             }
         });
         this.scene.add(controller);
@@ -1071,16 +1096,48 @@ class WebARApp {
                     const hit = hitTestResults[0];
                     const pose = hit.getPose(referenceSpace);
 
-                    this.reticle.visible = true;
-                    this.reticle.matrix.fromArray(pose.transform.matrix);
-                    
-                    // Mostrar recordatorio si no hay modelo colocado
-                    const instr = document.getElementById('instructions-overlay');
-                    if (!this.placedModel && instr) {
-                        instr.textContent = '¡Superficie detectada! Toca la pantalla para colocar el modelo.';
+                    if (pose && pose.transform && pose.transform.matrix) {
+                        const matrix = pose.transform.matrix;
+                        let hasNaN = false;
+                        for (let i = 0; i < matrix.length; i++) {
+                            if (isNaN(matrix[i])) {
+                                hasNaN = true;
+                                break;
+                            }
+                        }
+
+                        if (!hasNaN) {
+                            this.reticle.visible = true;
+                            this.reticle.matrix.fromArray(matrix);
+                            
+                            // Mostrar recordatorio si no hay modelo colocado
+                            const instr = document.getElementById('instructions-overlay');
+                            if (!this.placedModel && instr) {
+                                instr.textContent = '¡Superficie detectada! Toca la pantalla para colocar el modelo.';
+                            }
+                        } else {
+                            this.reticle.visible = false;
+                        }
+                    } else {
+                        this.reticle.visible = false;
                     }
                 } else {
                     this.reticle.visible = false;
+                }
+            }
+        }
+
+        // Sincronizar altura del suelo en AR en tiempo real con la retícula
+        if (this.xrSession && this.reticle.visible) {
+            const reticlePos = new THREE.Vector3().setFromMatrixPosition(this.reticle.matrix);
+            if (!isNaN(reticlePos.y)) {
+                this.physics.groundY = reticlePos.y;
+                
+                // Si el modelo está colocado y en reposo (sin simular y sin arrastrar), mantenerlo pegado al suelo
+                if (this.placedModel && !this.isDragging && !this.physics.isSimulating) {
+                    if (!isNaN(this.physics.groundY)) {
+                        this.placedModel.position.y = this.physics.groundY;
+                    }
                 }
             }
         }
