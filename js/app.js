@@ -64,6 +64,9 @@ class WebARApp {
         this.isDoubleTap = false;
         this.squashAmount = 0.0;
         this.squashTimer = 0.0;
+        this.arModelPlaced = false;
+        this.lastTouchX = 0;
+        this.lastTouchY = 0;
     }
 
     /**
@@ -91,6 +94,14 @@ class WebARApp {
         this.renderer.setAnimationLoop((time, frame) => this.render(time, frame));
 
         window.addEventListener('resize', () => this.onWindowResize());
+
+        // Guardar coordenadas de la última posición tocada en pantalla para raycasting en AR
+        window.addEventListener('touchstart', (e) => {
+            if (e.touches.length > 0) {
+                this.lastTouchX = e.touches[0].clientX;
+                this.lastTouchY = e.touches[0].clientY;
+            }
+        }, { passive: true });
     }
 
     /**
@@ -573,6 +584,13 @@ class WebARApp {
 
             // Si es un click rápido en el lienzo, no es arrastre ni doble toque
             if (clickDuration < 250 && !this.isDoubleTap) {
+                // Ignorar clicks en el 30% inferior de la pantalla (zona del panel de control y botones)
+                const screenHeight = window.innerHeight;
+                const touchY = e.clientY;
+                if (touchY > screenHeight - 260) {
+                    return;
+                }
+
                 this.updateMouseCoords(e);
                 const camera = this.xrSession ? this.renderer.xr.getCamera() : this.camera;
                 this.raycaster.setFromCamera(this.mouse, camera);
@@ -946,6 +964,9 @@ class WebARApp {
         
         session.addEventListener('end', () => this.onXRSessionEnded());
 
+        // Resetear bandera de colocación en AR
+        this.arModelPlaced = false;
+
         // Obtener espacio de referencia
         this.renderer.xr.setReferenceSpaceType('local');
         
@@ -957,8 +978,39 @@ class WebARApp {
 
         this.renderer.xr.setSession(session);
 
-        // Toda la interacción táctil en AR (colocación, arrastre, escala y físicas) se gestiona de manera unificada
-        // a través de los eventos de puntero estándar sobre el canvas gracias a dom-overlay.
+        // Controladores táctiles AR (WebXR Controller Fallback para WebXR Viewer)
+        const controller = this.renderer.xr.getController(0);
+        controller.addEventListener('select', () => {
+            // Ignorar toques en el 30% inferior de la pantalla (zona del panel de control y botones)
+            const screenHeight = window.innerHeight;
+            const touchY = this.lastTouchY || 0;
+            if (touchY > screenHeight - 260) {
+                return;
+            }
+
+            // 1. Raycast desde la cámara activa de WebXR para ver si toca el modelo colocado
+            if (this.placedModel) {
+                const camera = this.renderer.xr.getCamera();
+                const mouseX = ((this.lastTouchX || 0) / window.innerWidth) * 2 - 1;
+                const mouseY = -((this.lastTouchY || 0) / window.innerHeight) * 2 + 1;
+                const touchCoords = new THREE.Vector2(mouseX, mouseY);
+                this.raycaster.setFromCamera(touchCoords, camera);
+
+                const intersects = this.raycaster.intersectObject(this.placedModel, true);
+                if (intersects.length > 0) {
+                    this.triggerBounceDrop();
+                    return;
+                }
+            }
+
+            // 2. Si no toca el modelo, colocar en la retícula (solo si no se ha colocado aún en esta sesión AR)
+            if (!this.arModelPlaced && this.reticle.visible) {
+                const position = new THREE.Vector3().setFromMatrixPosition(this.reticle.matrix);
+                this.placeModel(position);
+                this.arModelPlaced = true;
+            }
+        });
+        this.scene.add(controller);
 
         // Ocultar rejilla física de escritorio
         this.gridHelper.visible = false;
