@@ -13,6 +13,8 @@ class PhysicsEngine {
         this.positionY = 0.0;      // Posición actual en Y
         this.velocityY = 0.0;      // Velocidad actual en Y
         this.isSimulating = false; // Estado de la simulación
+        this.lastImpactVelocity = 0.0; // Velocidad con la que impactó en el último rebote
+        this.onCollision = null;   // Callback disparado al impactar con el suelo (recibe la velocidad de impacto)
     }
 
     /**
@@ -25,6 +27,16 @@ class PhysicsEngine {
         this.velocityY = 0.0;
         this.isSimulating = true;
         console.log(`Físicas iniciadas. Altura de caída: ${this.positionY}m, Altura suelo: ${this.groundY}m`);
+    }
+
+    /**
+     * Aplica un impulso vertical instantáneo (salto) al objeto.
+     * @param {number} velocityY - Velocidad inicial hacia arriba (ej: 6.0 m/s)
+     */
+    applyImpulse(velocityY) {
+        this.velocityY = velocityY;
+        this.isSimulating = true;
+        console.log(`Físicas: Impulso aplicado con velocidad Y de ${velocityY} m/s`);
     }
 
     /**
@@ -59,8 +71,16 @@ class PhysicsEngine {
             // Posicionar exactamente en el suelo
             this.positionY = this.groundY;
 
+            // Guardar la velocidad de impacto (tomamos el valor absoluto de la velocidad de caída actual)
+            this.lastImpactVelocity = Math.abs(this.velocityY);
+
             // Invertir la velocidad con rebote elástico (restitución)
             this.velocityY = -this.velocityY * this.elasticity;
+
+            // Disparar callback de colisión si existe
+            if (this.onCollision) {
+                this.onCollision(this.lastImpactVelocity);
+            }
 
             // Si la velocidad resultante es extremadamente baja, detener la simulación (asentamiento)
             const velocityThreshold = 0.15; // Umbral en m/s
@@ -72,7 +92,7 @@ class PhysicsEngine {
                 console.log("El modelo se ha asentado en el suelo.");
             } else {
                 // Micro-animación de rebote (disparar evento sonoro o visual si es necesario)
-                console.log(`Rebote físico detectado. Velocidad de rebote: ${this.velocityY.toFixed(2)} m/s`);
+                console.log(`Rebote físico detectado. Velocidad de rebote: ${this.velocityY.toFixed(2)} m/s, Impacto: ${this.lastImpactVelocity.toFixed(2)} m/s`);
             }
         }
 

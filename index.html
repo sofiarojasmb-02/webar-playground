@@ -174,10 +174,19 @@
                         <input type="range" id="slider-metalness" min="0.0" max="1.0" step="0.05" value="0.8">
                     </div>
 
-                    <div class="color-picker-container" style="margin-top: auto;">
+                    <div class="color-picker-container" style="margin-top: auto; display: flex; flex-direction: column; gap: 8px; align-items: flex-start;">
                         <span style="font-size: 0.75rem; color: var(--text-muted);">Color del Material:</span>
-                        <div class="color-dot-picker" id="color-dot-container" style="background-color: #8b5cf6;">
-                            <input type="color" id="color-picker" value="#8b5cf6">
+                        <div style="display: flex; align-items: center; gap: 12px; width: 100%;">
+                            <div class="color-presets" style="display: flex; gap: 8px;">
+                                <div class="color-chip active" style="background-color: #8b5cf6;" data-color="#8b5cf6" title="Morado Eléctrico"></div>
+                                <div class="color-chip" style="background-color: #06b6d4;" data-color="#06b6d4" title="Cian Neón"></div>
+                                <div class="color-chip" style="background-color: #ef4444;" data-color="#ef4444" title="Rojo Vibrante"></div>
+                                <div class="color-chip" style="background-color: #eab308;" data-color="#eab308" title="Oro Sol"></div>
+                                <div class="color-chip" style="background-color: #10b981;" data-color="#10b981" title="Verde Esmeralda"></div>
+                            </div>
+                            <div class="color-dot-picker" id="color-dot-container" style="background-color: #8b5cf6; margin-left: auto;">
+                                <input type="color" id="color-picker" value="#8b5cf6">
+                            </div>
                         </div>
                     </div>
                 </div>

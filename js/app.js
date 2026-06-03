@@ -52,6 +52,18 @@ class WebARApp {
         this.mouse = new THREE.Vector2();
         this.isPointerDown = false;
         this.pointerDownTime = 0;
+
+        // Variables para gestos y control táctil interactivo
+        this.activePointers = {};
+        this.prevPinchDist = 0;
+        this.isPinching = false;
+        this.isDragging = false;
+        this.dragPlane = new THREE.Plane();
+        this.dragOffset = new THREE.Vector3();
+        this.lastTapTime = 0;
+        this.isDoubleTap = false;
+        this.squashAmount = 0.0;
+        this.squashTimer = 0.0;
     }
 
     /**
@@ -65,6 +77,12 @@ class WebARApp {
         this.setupUIEvents();
         this.setupWebXRAvailability();
         this.loadRecentGallery();
+
+        // Configurar colisión en físicas para squash elástico (efecto gelatina)
+        this.physics.onCollision = (impactVelocity) => {
+            this.squashAmount = Math.min(0.5, impactVelocity * 0.05); // Aplastar hasta un 50% max
+            this.squashTimer = 0.0;
+        };
 
         // Cargar modelo predeterminado por defecto
         this.selectPreset('cube');
@@ -282,10 +300,28 @@ class WebARApp {
 
         // Eventos para Estilizado y Color
         const colorInput = document.getElementById('color-picker');
-        colorInput.addEventListener('input', (e) => {
-            const color = e.target.value;
+        const updateColorFn = (color) => {
             this.currentColor = color;
             this.updateColor();
+            // Desactivar estado activo visual de chips
+            document.querySelectorAll('.color-chip').forEach(c => c.classList.remove('active'));
+        };
+        colorInput.addEventListener('input', (e) => updateColorFn(e.target.value));
+        colorInput.addEventListener('change', (e) => updateColorFn(e.target.value));
+
+        // Eventos de chips rápidos de color
+        document.querySelectorAll('.color-chip').forEach((chip) => {
+            chip.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const color = chip.getAttribute('data-color');
+                this.currentColor = color;
+                colorInput.value = color;
+                document.getElementById('color-dot-container').style.backgroundColor = color;
+                this.updateColor();
+
+                document.querySelectorAll('.color-chip').forEach(c => c.classList.remove('active'));
+                chip.classList.add('active');
+            });
         });
 
         const sliderRoughness = document.getElementById('slider-roughness');
@@ -382,6 +418,172 @@ class WebARApp {
                 item.classList.add('active');
             });
         });
+
+        // Inicializar interacciones multitáctiles de físicas y gestos
+        this.setupTouchInteractions();
+    }
+
+    /**
+     * Inicializa las interacciones táctiles avanzadas: Doble toque (salto),
+     * Arrastrar y Soltar (drag & drop) con físicas, y Pellizcar (pinch to deform).
+     */
+    setupTouchInteractions() {
+        const dom = this.renderer.domElement;
+
+        dom.addEventListener('pointerdown', (e) => {
+            // Registrar puntero activo
+            this.activePointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+
+            const pointerIds = Object.keys(this.activePointers);
+
+            // 1. Gesto de PELLIZCAR (2 dedos)
+            if (pointerIds.length === 2) {
+                // Cancelar cualquier arrastre de 1 dedo activo
+                this.isDragging = false;
+
+                const p1 = this.activePointers[pointerIds[0]];
+                const p2 = this.activePointers[pointerIds[1]];
+                this.prevPinchDist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+                
+                // Si al menos un dedo está sobre el modelo, permitimos pellizcar el modelo
+                this.raycaster.setFromCamera(this.mouse, this.camera);
+                const intersects = this.placedModel ? this.raycaster.intersectObject(this.placedModel, true) : [];
+                if (intersects.length > 0) {
+                    this.isPinching = true;
+                    this.controls.enabled = false; // Desactivar rotación de cámara
+                    
+                    // Colapsar panel para ver mejor el modelo
+                    const drawer = document.getElementById('control-drawer');
+                    if (drawer && !drawer.classList.contains('collapsed')) {
+                        drawer.classList.add('collapsed');
+                    }
+                }
+                return;
+            }
+
+            // 2. Gesto de 1 dedo (Doble toque y Arrastrar)
+            if (pointerIds.length === 1) {
+                this.isDoubleTap = false;
+                
+                // Comprobar DOBLE TOQUE
+                const now = performance.now();
+                const timeDiff = now - this.lastTapTime;
+                this.lastTapTime = now;
+
+                this.raycaster.setFromCamera(this.mouse, this.camera);
+                const intersects = this.placedModel ? this.raycaster.intersectObject(this.placedModel, true) : [];
+
+                if (timeDiff < 300 && intersects.length > 0) {
+                    // Doble toque en el modelo -> Salto de físicas
+                    this.isDoubleTap = true;
+                    this.physics.applyImpulse(6.0); // Impulso hacia arriba (m/s)
+                    this.showToast('¡Impulso aplicado! Salto elástico.');
+                    return;
+                }
+
+                // Si es un toque ordinario sobre el modelo, iniciar ARRASTRE (Drag & Drop)
+                if (intersects.length > 0) {
+                    // Esperar unos milisegundos para asegurar que no es doble toque antes de arrastrar
+                    setTimeout(() => {
+                        if (this.isDoubleTap || !this.activePointers[e.pointerId]) return;
+                        
+                        this.isDragging = true;
+                        this.controls.enabled = false; // Desactivar controles de cámara
+                        this.physics.stop(); // Pausar físicas durante el arrastre
+
+                        // Configurar el plano de arrastre horizontal y vertical orientado hacia la cámara
+                        const intersectPoint = intersects[0].point;
+                        const camDir = new THREE.Vector3();
+                        this.camera.getWorldDirection(camDir);
+                        this.dragPlane.setFromNormalAndCoplanarPoint(camDir.negate(), intersectPoint);
+                        
+                        // Guardar la compensación entre el centro del modelo y el punto tocado
+                        this.dragOffset.copy(this.placedModel.position).sub(intersectPoint);
+
+                        // Auto-colapsar el panel para dejar ver la escena
+                        const drawer = document.getElementById('control-drawer');
+                        if (drawer && !drawer.classList.contains('collapsed')) {
+                            drawer.classList.add('collapsed');
+                        }
+                    }, 50);
+                }
+            }
+        });
+
+        dom.addEventListener('pointermove', (e) => {
+            if (this.activePointers[e.pointerId]) {
+                this.activePointers[e.pointerId].x = e.clientX;
+                this.activePointers[e.pointerId].y = e.clientY;
+            }
+
+            const pointerIds = Object.keys(this.activePointers);
+
+            // 1. Mover durante PELLIZCO (Deformación)
+            if (this.isPinching && pointerIds.length === 2) {
+                const p1 = this.activePointers[pointerIds[0]];
+                const p2 = this.activePointers[pointerIds[1]];
+                const currentDist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+                
+                if (this.prevPinchDist > 0) {
+                    const ratio = currentDist / this.prevPinchDist;
+                    this.prevPinchDist = currentDist;
+                    
+                    // Modificar deformación Y
+                    this.currentDeformation = Math.max(0.4, Math.min(2.2, this.currentDeformation * ratio));
+                    
+                    // Sincronizar el deslizador de la UI
+                    const sliderDeform = document.getElementById('slider-deform');
+                    const valDeform = document.getElementById('val-deform');
+                    if (sliderDeform) sliderDeform.value = this.currentDeformation;
+                    if (valDeform) {
+                        const percent = ((this.currentDeformation - 1.0) * 100).toFixed(0);
+                        valDeform.textContent = this.currentDeformation >= 1.0 ? `+${percent}% (Estirar)` : `${percent}% (Comprimir)`;
+                    }
+                }
+                return;
+            }
+
+            // 2. Mover durante ARRASTRE
+            if (this.isDragging && this.placedModel && pointerIds.length === 1) {
+                this.updateMouseCoords(e);
+                this.raycaster.setFromCamera(this.mouse, this.camera);
+                
+                const intersection = new THREE.Vector3();
+                this.raycaster.ray.intersectPlane(this.dragPlane, intersection);
+                
+                // Mover el modelo
+                this.placedModel.position.copy(intersection).add(this.dragOffset);
+                
+                // Limitar al suelo
+                this.placedModel.position.y = Math.max(this.physics.groundY, this.placedModel.position.y);
+            }
+        });
+
+        const onPointerUp = (e) => {
+            delete this.activePointers[e.pointerId];
+            const pointerIds = Object.keys(this.activePointers);
+
+            if (this.isPinching && pointerIds.length < 2) {
+                this.isPinching = false;
+                this.controls.enabled = true; // Rehabilitar cámara
+            }
+
+            if (this.isDragging) {
+                this.isDragging = false;
+                this.controls.enabled = true; // Rehabilitar cámara
+                
+                // Soltar objeto: reiniciar caída libre de físicas desde la altura actual
+                if (this.placedModel) {
+                    this.physics.positionY = this.placedModel.position.y;
+                    this.physics.velocityY = 0.0;
+                    this.physics.isSimulating = true;
+                    this.showToast('Objeto soltado.');
+                }
+            }
+        };
+
+        dom.addEventListener('pointerup', onPointerUp);
+        dom.addEventListener('pointercancel', onPointerUp);
     }
 
     /**
@@ -702,9 +904,7 @@ class WebARApp {
      * Aplica la escala/deformación actual
      */
     updateDeformation() {
-        if (this.placedModel) {
-            this.deformer.applyDeformation(this.placedModel, this.currentDeformation);
-        }
+        // La deformación de volumen conservado ahora se calcula en la GPU de manera fluida (render loop)
     }
 
     /**
@@ -889,6 +1089,44 @@ class WebARApp {
                     this.showToast('Objeto en reposo.');
                 }
             );
+        }
+
+        // 3. Aplicar Squash & Stretch visual (Animación física elástica) y Deformación
+        if (this.placedModel) {
+            let scaleY = 1.0;
+            let scaleXZ = 1.0;
+
+            if (!this.isDragging) {
+                // Físicas: Estiramiento en el aire por velocidad de caída/subida
+                if (this.physics.isSimulating && Math.abs(this.physics.velocityY) > 0.1) {
+                    const velFactor = Math.min(0.25, Math.abs(this.physics.velocityY) * 0.015);
+                    scaleY += velFactor;
+                    scaleXZ -= velFactor * 0.5;
+                }
+
+                // Físicas: Aplastamiento elástico al colisionar con el suelo (efecto gelatina)
+                if (this.squashAmount > 0.0) {
+                    this.squashTimer += dt;
+                    const decay = Math.exp(-8 * this.squashTimer); // Amortiguación
+                    const osc = Math.cos(22 * this.squashTimer);   // Frecuencia
+                    const currentSquash = this.squashAmount * decay * osc;
+
+                    scaleY -= currentSquash;
+                    scaleXZ += currentSquash * 0.5;
+
+                    // Detener oscilación si el efecto es insignificante
+                    if (decay < 0.01) {
+                        this.squashAmount = 0.0;
+                    }
+                }
+            }
+
+            // Combinar con la deformación de volumen conservado del slider/pellizco
+            const finalScaleY = this.currentDeformation * scaleY;
+            const finalScaleXZ = (1.0 / Math.sqrt(this.currentDeformation)) * scaleXZ;
+
+            // Escalar el grupo colocado
+            this.placedModel.scale.set(finalScaleXZ, finalScaleY, finalScaleXZ);
         }
 
         // 3. Renderizar la escena
