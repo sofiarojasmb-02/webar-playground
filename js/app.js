@@ -380,32 +380,7 @@ class WebARApp {
             });
         }
 
-        // Eventos de ratón / táctil sobre el lienzo para el Simulador (adjuntados directamente al canvas)
-        this.renderer.domElement.addEventListener('pointerdown', (e) => {
-            this.isPointerDown = true;
-            this.pointerDownTime = performance.now();
-            this.updateMouseCoords(e);
-        });
-
-        this.renderer.domElement.addEventListener('pointermove', (e) => {
-            if (this.isPointerDown) {
-                // Si el usuario mueve el ratón, asumimos que puede ser órbita
-                const dragDist = performance.now() - this.pointerDownTime;
-                if (dragDist > 150) {
-                    // El cursor se movió con retraso largo, es órbita
-                }
-            }
-            this.updateMouseCoords(e);
-        });
-
-        this.renderer.domElement.addEventListener('pointerup', (e) => {
-            const clickDuration = performance.now() - this.pointerDownTime;
-            // Si el clic fue rápido (<250ms), simulamos colocación de objeto
-            if (this.isPointerDown && clickDuration < 250 && !this.xrSession) {
-                this.placeModelFromSimulator();
-            }
-            this.isPointerDown = false;
-        });
+        // Los eventos de ratón/táctil sobre el lienzo se manejan de manera unificada en setupTouchInteractions()
 
         // Eventos de selección de galería (se enlazan dinámicamente, excepto presets)
         document.querySelectorAll('.gallery-item[data-preset]').forEach((item) => {
@@ -427,6 +402,11 @@ class WebARApp {
      * Inicializa las interacciones táctiles avanzadas: Doble toque (salto),
      * Arrastrar y Soltar (drag & drop) con físicas, y Pellizcar (pinch to deform).
      */
+    /**
+     * Inicializa las interacciones táctiles avanzadas: Doble toque (salto),
+     * Arrastrar y Soltar (drag & drop) con físicas, y Pellizcar (pinch to deform).
+     * También maneja la colocación unificada y el rebote en clicks simples.
+     */
     setupTouchInteractions() {
         const dom = this.renderer.domElement;
 
@@ -446,7 +426,8 @@ class WebARApp {
                 this.prevPinchDist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
                 
                 // Si al menos un dedo está sobre el modelo, permitimos pellizcar el modelo
-                this.raycaster.setFromCamera(this.mouse, this.camera);
+                const camera = this.xrSession ? this.renderer.xr.getCamera() : this.camera;
+                this.raycaster.setFromCamera(this.mouse, camera);
                 const intersects = this.placedModel ? this.raycaster.intersectObject(this.placedModel, true) : [];
                 if (intersects.length > 0) {
                     this.isPinching = true;
@@ -464,13 +445,17 @@ class WebARApp {
             // 2. Gesto de 1 dedo (Doble toque y Arrastrar)
             if (pointerIds.length === 1) {
                 this.isDoubleTap = false;
+                this.isPointerDown = true;
+                this.pointerDownTime = performance.now();
+                this.updateMouseCoords(e);
                 
                 // Comprobar DOBLE TOQUE
                 const now = performance.now();
                 const timeDiff = now - this.lastTapTime;
                 this.lastTapTime = now;
 
-                this.raycaster.setFromCamera(this.mouse, this.camera);
+                const camera = this.xrSession ? this.renderer.xr.getCamera() : this.camera;
+                this.raycaster.setFromCamera(this.mouse, camera);
                 const intersects = this.placedModel ? this.raycaster.intersectObject(this.placedModel, true) : [];
 
                 if (timeDiff < 300 && intersects.length > 0) {
@@ -494,7 +479,7 @@ class WebARApp {
                         // Configurar el plano de arrastre horizontal y vertical orientado hacia la cámara
                         const intersectPoint = intersects[0].point;
                         const camDir = new THREE.Vector3();
-                        this.camera.getWorldDirection(camDir);
+                        camera.getWorldDirection(camDir);
                         this.dragPlane.setFromNormalAndCoplanarPoint(camDir.negate(), intersectPoint);
                         
                         // Guardar la compensación entre el centro del modelo y el punto tocado
@@ -546,7 +531,8 @@ class WebARApp {
             // 2. Mover durante ARRASTRE
             if (this.isDragging && this.placedModel && pointerIds.length === 1) {
                 this.updateMouseCoords(e);
-                this.raycaster.setFromCamera(this.mouse, this.camera);
+                const camera = this.xrSession ? this.renderer.xr.getCamera() : this.camera;
+                this.raycaster.setFromCamera(this.mouse, camera);
                 
                 const intersection = new THREE.Vector3();
                 this.raycaster.ray.intersectPlane(this.dragPlane, intersection);
@@ -560,6 +546,9 @@ class WebARApp {
         });
 
         const onPointerUp = (e) => {
+            const clickDuration = this.isPointerDown ? (performance.now() - this.pointerDownTime) : 1000;
+            this.isPointerDown = false;
+
             delete this.activePointers[e.pointerId];
             const pointerIds = Object.keys(this.activePointers);
 
@@ -578,6 +567,26 @@ class WebARApp {
                     this.physics.velocityY = 0.0;
                     this.physics.isSimulating = true;
                     this.showToast('Objeto soltado.');
+                }
+                return;
+            }
+
+            // Si es un click rápido en el lienzo, no es arrastre ni doble toque
+            if (clickDuration < 250 && !this.isDoubleTap) {
+                this.updateMouseCoords(e);
+                const camera = this.xrSession ? this.renderer.xr.getCamera() : this.camera;
+                this.raycaster.setFromCamera(this.mouse, camera);
+
+                const intersects = this.placedModel ? this.raycaster.intersectObject(this.placedModel, true) : [];
+                if (intersects.length > 0) {
+                    // Si tocamos el modelo: relanzar físicas (rebote) pero NO abrir panel de control
+                    this.triggerBounceDrop();
+                } else {
+                    // Si no tocamos el modelo, y NO hay modelo colocado aún, lo colocamos en la retícula
+                    if (!this.placedModel && this.reticle.visible) {
+                        const position = new THREE.Vector3().setFromMatrixPosition(this.reticle.matrix);
+                        this.placeModel(position);
+                    }
                 }
             }
         };
@@ -859,31 +868,6 @@ class WebARApp {
         this.showToast('Modelo colocado en la superficie.');
     }
 
-    /**
-     * Simula colocación del modelo en escritorio al hacer clic sobre la retícula
-     */
-    placeModelFromSimulator() {
-        // 1. Raycast contra el modelo colocado (si existe) para interactuar con físicas y abrir panel
-        if (this.placedModel) {
-            this.raycaster.setFromCamera(this.mouse, this.camera);
-            const intersects = this.raycaster.intersectObject(this.placedModel, true);
-            if (intersects.length > 0) {
-                // Si tocamos el modelo: relanzar físicas y abrir panel de control
-                this.triggerBounceDrop();
-                const drawer = document.getElementById('control-drawer');
-                if (drawer && drawer.classList.contains('collapsed')) {
-                    drawer.classList.remove('collapsed');
-                }
-                return;
-            }
-        }
-
-        // 2. Si no tocamos el modelo, colocar uno nuevo en la retícula
-        if (this.reticle.visible) {
-            const position = new THREE.Vector3().setFromMatrixPosition(this.reticle.matrix);
-            this.placeModel(position);
-        }
-    }
 
     /**
      * Dispara de nuevo el lanzamiento/caída física
@@ -973,36 +957,8 @@ class WebARApp {
 
         this.renderer.xr.setSession(session);
 
-        // Controladores táctiles AR
-        const controller = this.renderer.xr.getController(0);
-        controller.addEventListener('select', () => {
-            // 1. Raycast desde el controlador en AR para ver si toca el modelo colocado
-            if (this.placedModel) {
-                const tempMatrix = new THREE.Matrix4();
-                tempMatrix.identity().extractRotation(controller.matrixWorld);
-                this.raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
-                this.raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
-
-                const intersects = this.raycaster.intersectObject(this.placedModel, true);
-                if (intersects.length > 0) {
-                    // Si tocamos el modelo: relanzar físicas y abrir panel en AR
-                    this.triggerBounceDrop();
-                    const drawer = document.getElementById('control-drawer');
-                    if (drawer) {
-                        drawer.classList.add('ar-visible');
-                        drawer.classList.remove('collapsed');
-                    }
-                    return;
-                }
-            }
-
-            // 2. Si no toca el modelo, colocar en la retícula
-            if (this.reticle.visible) {
-                const position = new THREE.Vector3().setFromMatrixPosition(this.reticle.matrix);
-                this.placeModel(position);
-            }
-        });
-        this.scene.add(controller);
+        // Toda la interacción táctil en AR (colocación, arrastre, escala y físicas) se gestiona de manera unificada
+        // a través de los eventos de puntero estándar sobre el canvas gracias a dom-overlay.
 
         // Ocultar rejilla física de escritorio
         this.gridHelper.visible = false;

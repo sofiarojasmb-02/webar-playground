@@ -26,6 +26,12 @@
     -webkit-tap-highlight-color: transparent;
 }
 
+html {
+    width: 100%;
+    height: 100dvh;
+    overflow: hidden;
+}
+
 body {
     background-color: var(--bg-dark);
     color: var(--text-light);
@@ -44,6 +50,13 @@ body {
     height: 100%;
     z-index: 1;
     touch-action: none; /* Previene gestos por defecto sobre el lienzo 3D en móvil */
+}
+
+/* Forzar que el lienzo WebGL siempre cubra la pantalla en móviles y simulador */
+canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
 }
 
 /* Cabecera / Banner Minimalista */
