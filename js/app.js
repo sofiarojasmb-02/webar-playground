@@ -335,14 +335,23 @@ class WebARApp {
             this.toggleXRSession();
         });
 
-        // Eventos de ratón / táctil sobre el lienzo para el Simulador
-        this.container.addEventListener('pointerdown', (e) => {
+        // Botón de Ajustes en AR
+        const settingsToggle = document.getElementById('settings-toggle');
+        if (settingsToggle) {
+            settingsToggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                drawer.classList.toggle('ar-visible');
+            });
+        }
+
+        // Eventos de ratón / táctil sobre el lienzo para el Simulador (adjuntados directamente al canvas)
+        this.renderer.domElement.addEventListener('pointerdown', (e) => {
             this.isPointerDown = true;
             this.pointerDownTime = performance.now();
             this.updateMouseCoords(e);
         });
 
-        this.container.addEventListener('pointermove', (e) => {
+        this.renderer.domElement.addEventListener('pointermove', (e) => {
             if (this.isPointerDown) {
                 // Si el usuario mueve el ratón, asumimos que puede ser órbita
                 const dragDist = performance.now() - this.pointerDownTime;
@@ -353,7 +362,7 @@ class WebARApp {
             this.updateMouseCoords(e);
         });
 
-        this.container.addEventListener('pointerup', (e) => {
+        this.renderer.domElement.addEventListener('pointerup', (e) => {
             const clickDuration = performance.now() - this.pointerDownTime;
             // Si el clic fue rápido (<250ms), simulamos colocación de objeto
             if (this.isPointerDown && clickDuration < 250 && !this.xrSession) {
@@ -652,6 +661,22 @@ class WebARApp {
      * Simula colocación del modelo en escritorio al hacer clic sobre la retícula
      */
     placeModelFromSimulator() {
+        // 1. Raycast contra el modelo colocado (si existe) para interactuar con físicas y abrir panel
+        if (this.placedModel) {
+            this.raycaster.setFromCamera(this.mouse, this.camera);
+            const intersects = this.raycaster.intersectObject(this.placedModel, true);
+            if (intersects.length > 0) {
+                // Si tocamos el modelo: relanzar físicas y abrir panel de control
+                this.triggerBounceDrop();
+                const drawer = document.getElementById('control-drawer');
+                if (drawer && drawer.classList.contains('collapsed')) {
+                    drawer.classList.remove('collapsed');
+                }
+                return;
+            }
+        }
+
+        // 2. Si no tocamos el modelo, colocar uno nuevo en la retícula
         if (this.reticle.visible) {
             const position = new THREE.Vector3().setFromMatrixPosition(this.reticle.matrix);
             this.placeModel(position);
@@ -751,6 +776,27 @@ class WebARApp {
         // Controladores táctiles AR
         const controller = this.renderer.xr.getController(0);
         controller.addEventListener('select', () => {
+            // 1. Raycast desde el controlador en AR para ver si toca el modelo colocado
+            if (this.placedModel) {
+                const tempMatrix = new THREE.Matrix4();
+                tempMatrix.identity().extractRotation(controller.matrixWorld);
+                this.raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+                this.raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+
+                const intersects = this.raycaster.intersectObject(this.placedModel, true);
+                if (intersects.length > 0) {
+                    // Si tocamos el modelo: relanzar físicas y abrir panel en AR
+                    this.triggerBounceDrop();
+                    const drawer = document.getElementById('control-drawer');
+                    if (drawer) {
+                        drawer.classList.add('ar-visible');
+                        drawer.classList.remove('collapsed');
+                    }
+                    return;
+                }
+            }
+
+            // 2. Si no toca el modelo, colocar en la retícula
             if (this.reticle.visible) {
                 const position = new THREE.Vector3().setFromMatrixPosition(this.reticle.matrix);
                 this.placeModel(position);
@@ -769,6 +815,12 @@ class WebARApp {
         this.xrSession = null;
         this.hitTestSource = null;
         document.body.classList.remove('ar-active');
+
+        // Restaurar estado de visibilidad del panel de control
+        const drawer = document.getElementById('control-drawer');
+        if (drawer) {
+            drawer.classList.remove('ar-visible');
+        }
 
         // Restaurar rejilla del simulador
         this.gridHelper.visible = true;

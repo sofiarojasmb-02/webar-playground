@@ -32,7 +32,7 @@ body {
     font-family: var(--font-body);
     overflow: hidden;
     width: 100vw;
-    height: 100vh;
+    height: 100dvh; /* dvh evita desbordamientos en iOS Safari por barra de navegación */
 }
 
 /* Contenedor del Canvas 3D */
@@ -43,6 +43,7 @@ body {
     width: 100%;
     height: 100%;
     z-index: 1;
+    touch-action: none; /* Previene gestos por defecto sobre el lienzo 3D en móvil */
 }
 
 /* Cabecera / Banner Minimalista */
@@ -201,10 +202,11 @@ header {
     border-top-left-radius: 28px;
     border-top-right-radius: 28px;
     z-index: 20;
-    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
     box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.5);
     display: flex;
     flex-direction: column;
+    padding-bottom: env(safe-area-inset-bottom); /* Soporte de barra inferior/indicador en iOS */
 }
 
 /* Estado Colapsado */
@@ -530,11 +532,55 @@ input[type="range"]::-moz-range-thumb:hover {
     }
 }
 
-/* Ocultar elementos en modo AR */
-body.ar-active #control-drawer,
+/* Ocultar elementos en modo AR por defecto */
 body.ar-active header {
     opacity: 0;
     pointer-events: none;
+}
+
+body.ar-active #control-drawer {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Permitir mostrar el panel de control en modo AR al presionar el modelo o el botón de ajustes */
+body.ar-active #control-drawer.ar-visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Botón de Ajustes Flotante en AR */
+.btn-settings {
+    background: rgba(13, 14, 45, 0.85);
+    border: 1px solid var(--border-glass);
+    border-radius: 50%;
+    width: 60px;
+    height: 60px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    box-shadow: var(--shadow-neon-purple);
+    font-size: 1.5rem;
+    transition: transform 0.2s, box-shadow 0.2s;
+    color: var(--text-light);
+}
+
+.btn-settings:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.8);
+}
+
+#settings-button-container {
+    position: absolute;
+    bottom: 195px;
+    right: 20px;
+    z-index: 10;
+    display: none;
+}
+
+body.ar-active #settings-button-container {
+    display: block;
 }
 
 /* Notificaciones visuales de error/info */
