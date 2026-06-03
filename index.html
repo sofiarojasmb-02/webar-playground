@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#050515">
+    <title>WebXR Augmented Reality Playground</title>
+    
+    <!-- Fuentes Web de Alta Calidad -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+    
+    <!-- Estilos Personalizados -->
+    <link rel="stylesheet" href="css/style.css">
+    
+    <!-- Importmap para cargar Three.js como módulos de forma moderna -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.154.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.154.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+    <!-- Notificación emergente (Toast) -->
+    <div id="toast-notification"></div>
+
+    <!-- Indicador de Instrucciones de Usuario -->
+    <div id="instructions-overlay">
+        Haz clic en la cuadrícula para colocar el objeto seleccionado
+    </div>
+
+    <!-- Cabecera / Status Bar -->
+    <header>
+        <div class="brand-container">
+            <h1>ANTIGRAVITY AR</h1>
+            <span>Motor de físicas & deformador</span>
+        </div>
+        <div class="status-indicator">
+            <div id="status-dot" class="status-dot"></div>
+            <span id="status-text">Inicializando...</span>
+        </div>
+    </header>
+
+    <!-- Contenedor del Lienzo WebGL -->
+    <div id="canvas-container"></div>
+
+    <!-- Botón Flotante para Iniciar WebXR AR (Solo móvil soportado) -->
+    <div id="ar-button-container">
+        <button id="ar-toggle" class="btn-ar" title="Iniciar Realidad Aumentada">
+            <!-- Icono SVG de Visor AR -->
+            <svg viewBox="0 0 24 24">
+                <path d="M19,4H5A2,2 0 0,0 3,6V18A2,2 0 0,0 5,20H9V18H5V8H19V18H15V20H19A2,2 0 0,0 21,18V6A2,2 0 0,0 19,4M7.5,10A2.5,2.5 0 0,0 5,12.5A2.5,2.5 0 0,0 7.5,15A2.5,2.5 0 0,0 10,12.5A2.5,2.5 0 0,0 7.5,10M12,12.5A1.5,1.5 0 0,0 10.5,14A1.5,1.5 0 0,0 12,15.5A1.5,1.5 0 0,0 13.5,14A1.5,1.5 0 0,0 12,12.5M16.5,10A2.5,2.5 0 0,0 14,12.5A2.5,2.5 0 0,0 16.5,15A2.5,2.5 0 0,0 19,12.5A2.5,2.5 0 0,0 16.5,10Z" />
+            </svg>
+        </button>
+    </div>
+
+    <!-- Menú Desplegable Inferior (Control Drawer) -->
+    <div id="control-drawer" class="collapsed">
+        <!-- Tirador de Arrastre -->
+        <div id="drawer-handle" class="drawer-handle">
+            <div class="drawer-pill"></div>
+            <div class="drawer-title">Consola de Control</div>
+        </div>
+
+        <!-- Contenido de Controles -->
+        <div class="drawer-content">
+            
+            <!-- SECCIÓN 1: Selección y Carga -->
+            <div class="drawer-section">
+                <div class="drawer-section-title">Modelos y Galería</div>
+                <div class="gallery-grid">
+                    <!-- Presets Predeterminados -->
+                    <div class="gallery-item active" data-preset="cube">
+                        <div class="gallery-icon">🧊</div>
+                        <div class="gallery-name">Cubo Preset</div>
+                    </div>
+                    <div class="gallery-item" data-preset="sphere">
+                        <div class="gallery-icon">🔮</div>
+                        <div class="gallery-name">Esfera Preset</div>
+                    </div>
+                    <div class="gallery-item" data-preset="torus">
+                        <div class="gallery-icon">🍩</div>
+                        <div class="gallery-name">Toro Preset</div>
+                    </div>
+                    
+                    <!-- Zona para subir archivo local -->
+                    <div id="upload-zone" class="upload-container">
+                        <div class="upload-icon">➕</div>
+                        <div class="upload-text">Subir 3D</div>
+                        <input type="file" id="file-input" class="file-input" accept=".obj,.stl,.glb,.gltf">
+                    </div>
+                </div>
+                <!-- Modelos guardados dinámicamente de IndexedDB se agregarán aquí -->
+                <div class="gallery-grid" id="gallery-items" style="margin-top: 8px;">
+                    <!-- Insertados por JS -->
+                </div>
+            </div>
+
+            <!-- SECCIÓN 2: Panel de Interacciones (Cuadrícula de 2 columnas) -->
+            <div class="controls-layout">
+                
+                <!-- Tarjeta de Físicas y Rebote -->
+                <div class="control-card">
+                    <div class="drawer-section-title" style="border-left-color: var(--color-secondary);">Físicas de Rebote</div>
+                    
+                    <div class="slider-group">
+                        <div class="slider-label">
+                            <span>Gravedad</span>
+                            <span id="val-gravity" class="slider-value">9.8 m/s²</span>
+                        </div>
+                        <input type="range" id="slider-gravity" min="0" max="25" step="0.5" value="9.8">
+                    </div>
+
+                    <div class="slider-group">
+                        <div class="slider-label">
+                            <span>Elasticidad (Rebote)</span>
+                            <span id="val-elasticity" class="slider-value">60%</span>
+                        </div>
+                        <input type="range" id="slider-elasticity" min="0" max="0.95" step="0.05" value="0.6">
+                    </div>
+
+                    <div class="slider-group">
+                        <div class="slider-label">
+                            <span>Altura de Caída</span>
+                            <span id="val-height" class="slider-value">1.2 m</span>
+                        </div>
+                        <input type="range" id="slider-height" min="0.2" max="3.0" step="0.1" value="1.2">
+                    </div>
+
+                    <button id="btn-drop" class="btn-primary" style="margin-top: auto; background: linear-gradient(135deg, var(--color-secondary), var(--color-accent)); box-shadow: var(--shadow-neon-cyan);">
+                        Lanzar Modelo
+                    </button>
+                </div>
+
+                <!-- Tarjeta de Deformación y Estilizado -->
+                <div class="control-card">
+                    <div class="drawer-section-title">Estilo y Deformación</div>
+
+                    <div class="slider-group">
+                        <div class="slider-label">
+                            <span>Estirar / Comprimir Y</span>
+                            <span id="val-deform" class="slider-value">1.0 (Original)</span>
+                        </div>
+                        <input type="range" id="slider-deform" min="0.4" max="2.2" step="0.05" value="1.0">
+                    </div>
+
+                    <div class="slider-group">
+                        <div class="slider-label">
+                            <span>Material - Rugosidad</span>
+                            <span id="val-roughness" class="slider-value">40%</span>
+                        </div>
+                        <input type="range" id="slider-roughness" min="0.0" max="1.0" step="0.05" value="0.4">
+                    </div>
+
+                    <div class="slider-group">
+                        <div class="slider-label">
+                            <span>Material - Metalizado</span>
+                            <span id="val-metalness" class="slider-value">80%</span>
+                        </div>
+                        <input type="range" id="slider-metalness" min="0.0" max="1.0" step="0.05" value="0.8">
+                    </div>
+
+                    <div class="color-picker-container" style="margin-top: auto;">
+                        <span style="font-size: 0.75rem; color: var(--text-muted);">Color del Material:</span>
+                        <div class="color-dot-picker" id="color-dot-container" style="background-color: #8b5cf6;">
+                            <input type="color" id="color-picker" value="#8b5cf6">
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Scripts de la Aplicación (Estructura modular cargada secuencialmente) -->
+    <script src="js/db.js"></script>
+    <script src="js/physics.js"></script>
+    <script src="js/deform.js"></script>
+    
+    <!-- Script principal como módulo ES6 -->
+    <script type="module" src="js/app.js"></script>
+    
+    <!-- Sincronizar el color del indicador circular del picker -->
+    <script>
+        const colorPicker = document.getElementById('color-picker');
+        const colorDot = document.getElementById('color-dot-container');
+        colorPicker.addEventListener('input', (e) => {
+            colorDot.style.backgroundColor = e.target.value;
+        });
+    </script>
+</body>
+</html>

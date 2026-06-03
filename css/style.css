@@ -1,0 +1,564 @@
+/*
+ * style.css - Identidad Visual y Estética Premium
+ * Paleta de colores: Morados profundos y azules de neón.
+ * Diseño Glassmorphic, controles ergonómicos de tipo Menú Inferior.
+ */
+
+:root {
+    --bg-dark: #050515;
+    --bg-drawer: rgba(13, 14, 45, 0.75);
+    --border-glass: rgba(139, 92, 246, 0.2);
+    --color-primary: #8b5cf6; /* Morado Eléctrico */
+    --color-secondary: #06b6d4; /* Cian Neón */
+    --color-accent: #3b82f6; /* Azul Tecnológico */
+    --text-light: #f3f4f6;
+    --text-muted: #9ca3af;
+    --shadow-neon-purple: 0 0 15px rgba(139, 92, 246, 0.4);
+    --shadow-neon-cyan: 0 0 15px rgba(6, 182, 212, 0.4);
+    --font-header: 'Orbitron', sans-serif;
+    --font-body: 'Inter', sans-serif;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    background-color: var(--bg-dark);
+    color: var(--text-light);
+    font-family: var(--font-body);
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+}
+
+/* Contenedor del Canvas 3D */
+#canvas-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+}
+
+/* Cabecera / Banner Minimalista */
+header {
+    position: absolute;
+    top: 15px;
+    left: 15px;
+    right: 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    pointer-events: none;
+    z-index: 10;
+}
+
+.brand-container {
+    background: rgba(5, 5, 21, 0.6);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border-glass);
+    border-radius: 12px;
+    padding: 10px 16px;
+    display: flex;
+    flex-direction: column;
+    pointer-events: auto;
+}
+
+.brand-container h1 {
+    font-family: var(--font-header);
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--text-light);
+    text-shadow: 0 0 8px rgba(139, 92, 246, 0.6);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.brand-container h1::before {
+    content: '';
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background-color: var(--color-secondary);
+    border-radius: 50%;
+    box-shadow: var(--shadow-neon-cyan);
+    animation: pulse 2s infinite;
+}
+
+.brand-container span {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+/* Indicadores de Estado y XR */
+.status-indicator {
+    background: rgba(5, 5, 21, 0.6);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border-glass);
+    border-radius: 12px;
+    padding: 10px 16px;
+    font-size: 0.8rem;
+    color: var(--text-light);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    pointer-events: auto;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #ef4444; /* Rojo por defecto */
+}
+
+.status-dot.active {
+    background-color: #10b981; /* Verde */
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.8);
+}
+
+.status-dot.warning {
+    background-color: #f59e0b; /* Naranja */
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.8);
+}
+
+/* Instrucciones para el usuario */
+#instructions-overlay {
+    position: absolute;
+    top: 90px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(13, 14, 45, 0.8);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border-glass);
+    border-radius: 30px;
+    padding: 10px 24px;
+    font-size: 0.85rem;
+    font-family: var(--font-header);
+    letter-spacing: 0.5px;
+    color: var(--text-light);
+    text-align: center;
+    box-shadow: var(--shadow-neon-purple);
+    z-index: 10;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+    max-width: 90%;
+}
+
+/* Botón AR Flotante */
+#ar-button-container {
+    position: absolute;
+    bottom: 120px;
+    right: 20px;
+    z-index: 10;
+}
+
+.btn-ar {
+    background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+    border: none;
+    border-radius: 50%;
+    width: 60px;
+    height: 60px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    box-shadow: var(--shadow-neon-purple);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.btn-ar:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.8), 0 0 10px rgba(6, 182, 212, 0.5);
+}
+
+.btn-ar svg {
+    width: 28px;
+    height: 28px;
+    fill: var(--text-light);
+}
+
+/* --- Menú de Controles Inferior (Bottom Drawer) --- */
+#control-drawer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 420px;
+    background: var(--bg-drawer);
+    backdrop-filter: blur(16px);
+    border-top: 1px solid var(--border-glass);
+    border-top-left-radius: 28px;
+    border-top-right-radius: 28px;
+    z-index: 20;
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+}
+
+/* Estado Colapsado */
+#control-drawer.collapsed {
+    transform: translateY(370px); /* Deja visible solo la barra del tirador */
+}
+
+/* Tirador del Menú Inferior */
+.drawer-handle {
+    width: 100%;
+    height: 50px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    background: transparent;
+    user-select: none;
+}
+
+.drawer-pill {
+    width: 48px;
+    height: 5px;
+    background-color: var(--text-muted);
+    border-radius: 3px;
+    opacity: 0.6;
+    transition: opacity 0.2s, background-color 0.2s;
+}
+
+.drawer-handle:hover .drawer-pill {
+    opacity: 1;
+    background-color: var(--color-secondary);
+}
+
+.drawer-title {
+    font-family: var(--font-header);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-top: 6px;
+}
+
+/* Contenedor del contenido del Drawer con scroll horizontal */
+.drawer-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 20px 24px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* Secciones del Drawer */
+.drawer-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.drawer-section-title {
+    font-family: var(--font-header);
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--color-secondary);
+    text-transform: uppercase;
+    border-left: 3px solid var(--color-primary);
+    padding-left: 8px;
+}
+
+/* Galería de Modelos Recientes */
+.gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    width: 100%;
+}
+
+.gallery-item {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-glass);
+    border-radius: 12px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s, transform 0.2s;
+    height: 75px;
+    text-align: center;
+}
+
+.gallery-item:hover, .gallery-item.active {
+    background: rgba(139, 92, 246, 0.15);
+    border-color: var(--color-primary);
+    box-shadow: var(--shadow-neon-purple);
+    transform: translateY(-2px);
+}
+
+.gallery-icon {
+    font-size: 1.4rem;
+    margin-bottom: 4px;
+}
+
+.gallery-name {
+    font-size: 0.65rem;
+    font-weight: 500;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-light);
+}
+
+/* Zona de Carga de Archivo */
+.upload-container {
+    position: relative;
+    border: 1.5px dashed var(--border-glass);
+    border-radius: 12px;
+    padding: 12px;
+    text-align: center;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.01);
+    transition: background 0.2s, border-color 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 75px;
+}
+
+.upload-container:hover, .upload-container.dragover {
+    background: rgba(6, 182, 212, 0.08);
+    border-color: var(--color-secondary);
+}
+
+.upload-text {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+.upload-icon {
+    font-size: 1.2rem;
+    color: var(--color-secondary);
+}
+
+.file-input {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+/* Controles de Deformación, Físicas y Estilo */
+.controls-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+@media (max-width: 600px) {
+    .controls-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+.control-card {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 16px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.slider-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.slider-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.slider-value {
+    font-family: var(--font-header);
+    color: var(--color-secondary);
+    font-size: 0.75rem;
+}
+
+/* Rango de Deslizador Estilizado */
+input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.1);
+    outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    box-shadow: var(--shadow-neon-purple);
+    cursor: pointer;
+    transition: transform 0.1s;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+}
+
+input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border: none;
+    border-radius: 50%;
+    background: var(--color-primary);
+    box-shadow: var(--shadow-neon-purple);
+    cursor: pointer;
+    transition: transform 0.1s;
+}
+
+input[type="range"]::-moz-range-thumb:hover {
+    transform: scale(1.2);
+}
+
+/* Selector de Color y Detalle */
+.color-picker-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.color-dot-picker {
+    position: relative;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 2px solid var(--text-light);
+    cursor: pointer;
+    overflow: hidden;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+}
+
+.color-dot-picker input[type="color"] {
+    position: absolute;
+    top: -5px;
+    left: -5px;
+    width: 44px;
+    height: 44px;
+    border: none;
+    cursor: pointer;
+    background: none;
+}
+
+/* Botones en Drawer */
+.btn-primary {
+    background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+    border: none;
+    border-radius: 10px;
+    padding: 10px 16px;
+    color: var(--text-light);
+    font-family: var(--font-header);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 1px;
+    cursor: pointer;
+    box-shadow: var(--shadow-neon-purple);
+    transition: transform 0.15s, opacity 0.15s;
+    text-transform: uppercase;
+}
+
+.btn-primary:active {
+    transform: scale(0.96);
+}
+
+.btn-primary:hover {
+    opacity: 0.95;
+}
+
+/* Personalización del scroll de la interfaz */
+.drawer-content::-webkit-scrollbar {
+    width: 4px;
+}
+
+.drawer-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.drawer-content::-webkit-scrollbar-thumb {
+    background: var(--border-glass);
+    border-radius: 2px;
+}
+
+/* Animaciones */
+@keyframes pulse {
+    0%, 100% {
+        opacity: 0.4;
+        transform: scale(0.9);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.1);
+        box-shadow: 0 0 12px var(--color-secondary);
+    }
+}
+
+/* Ocultar elementos en modo AR */
+body.ar-active #control-drawer,
+body.ar-active header {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Notificaciones visuales de error/info */
+#toast-notification {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-100px);
+    background: rgba(239, 68, 68, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    padding: 12px 24px;
+    color: white;
+    font-size: 0.85rem;
+    font-family: var(--font-header);
+    z-index: 100;
+    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    text-align: center;
+}
+
+#toast-notification.show {
+    transform: translateX(-50%) translateY(0);
+}
+#toast-notification.info {
+    background: rgba(6, 182, 212, 0.9);
+}
