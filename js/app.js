@@ -88,12 +88,6 @@ class WebARApp {
         this.inflateAmount = 0.0;
         this.inflateTimer = 0.0;
         this.currentMaterialType = 'solid';
-
-        // Lógica de manipulación 3D lateral
-        this.manipulationMode = 'none';
-        this.isRotatingModel = false;
-        this.isScalingModel = false;
-        this.isTranslatingModel = false;
     }
 
     /**
@@ -549,38 +543,6 @@ class WebARApp {
             });
         });
 
-        // Botones de manipulación del panel lateral
-        const manipBtns = document.querySelectorAll('.manipulation-btn');
-        manipBtns.forEach((btn) => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (!this.placedModel) {
-                    this.showToast('Primero coloca el modelo en la escena.', 'warning');
-                    return;
-                }
-
-                const mode = btn.getAttribute('data-mode');
-                
-                // Si el modo ya estaba activo, desactivarlo (volver a 'none')
-                if (this.manipulationMode === mode) {
-                    this.manipulationMode = 'none';
-                    btn.classList.remove('active');
-                    if (!this.videoArActive || !this.gyroActive) {
-                        this.controls.enabled = true; // Rehabilitar controles de cámara
-                    }
-                    this.showToast('Modo de visualización activado.');
-                } else {
-                    // Desactivar todos los demás botones de la UI
-                    manipBtns.forEach(b => b.classList.remove('active'));
-                    
-                    this.manipulationMode = mode;
-                    btn.classList.add('active');
-                    this.controls.enabled = false; // Desactivar controles de cámara para evitar conflictos
-                    this.showToast(`Modo ${mode === 'move' ? 'Mover' : mode === 'rotate' ? 'Rotar' : 'Escalar'} activado.`);
-                }
-            });
-        });
-
         // Inicializar interacciones multitáctiles de físicas y gestos
         this.setupTouchInteractions();
     }
@@ -654,34 +616,6 @@ class WebARApp {
                     this.showToast('¡Modelo inflado con rebote elástico!');
                     return;
                 }
-
-                // Si tocamos el modelo y hay un modo de manipulación activo
-                if (intersects.length > 0 && this.manipulationMode !== 'none') {
-                    const intersectPoint = intersects[0].point;
-                    if (intersectPoint && !isNaN(intersectPoint.x) && !isNaN(intersectPoint.y) && !isNaN(intersectPoint.z)) {
-                        if (this.manipulationMode === 'move') {
-                            this.isTranslatingModel = true;
-                            this.physics.stop(); // Pausar físicas
-                            const camDir = new THREE.Vector3();
-                            camera.getWorldDirection(camDir);
-                            if (isNaN(camDir.x) || isNaN(camDir.y) || isNaN(camDir.z)) {
-                                camDir.set(0, 0, -1);
-                            }
-                            this.dragPlane.setFromNormalAndCoplanarPoint(camDir.negate(), intersectPoint);
-                            if (this.placedModel && !isNaN(this.placedModel.position.x)) {
-                                this.dragOffset.copy(this.placedModel.position).sub(intersectPoint);
-                            } else {
-                                this.dragOffset.set(0, 0, 0);
-                            }
-                        } else if (this.manipulationMode === 'rotate') {
-                            this.isRotatingModel = true;
-                            this.lastTouchX = e.clientX;
-                        } else if (this.manipulationMode === 'scale') {
-                            this.isScalingModel = true;
-                            this.lastTouchY = e.clientY;
-                        }
-                    }
-                }
             }
         });
 
@@ -722,36 +656,7 @@ class WebARApp {
                 return;
             }
 
-            // 2. Manipulación: Mover, Rotar, Escalar
-            if (pointerIds.length === 1 && this.placedModel) {
-                if (this.isTranslatingModel) {
-                    this.updateMouseCoords(e);
-                    const camera = this.xrSession ? this.renderer.xr.getCamera() : this.camera;
-                    this.raycaster.setFromCamera(this.mouse, camera);
-                    const intersection = new THREE.Vector3();
-                    const result = this.raycaster.ray.intersectPlane(this.dragPlane, intersection);
-                    if (result && !isNaN(intersection.x) && !isNaN(intersection.y) && !isNaN(intersection.z)) {
-                        this.placedModel.position.copy(intersection).add(this.dragOffset);
-                        const floorY = isNaN(this.physics.groundY) ? 0.0 : this.physics.groundY;
-                        this.placedModel.position.y = Math.max(floorY, this.placedModel.position.y);
-                    }
-                } else if (this.isRotatingModel) {
-                    const deltaX = e.clientX - this.lastTouchX;
-                    this.lastTouchX = e.clientX;
-                    this.placedModel.rotation.y += deltaX * 0.01;
-                } else if (this.isScalingModel) {
-                    const deltaY = e.clientY - this.lastTouchY;
-                    this.lastTouchY = e.clientY;
-                    const scaleChange = 1.0 - deltaY * 0.005;
-                    this.placedModel.scale.multiplyScalar(scaleChange);
-                    
-                    const minScale = 0.1;
-                    const maxScale = 3.0;
-                    this.placedModel.scale.x = Math.max(minScale, Math.min(maxScale, this.placedModel.scale.x));
-                    this.placedModel.scale.y = Math.max(minScale, Math.min(maxScale, this.placedModel.scale.y));
-                    this.placedModel.scale.z = Math.max(minScale, Math.min(maxScale, this.placedModel.scale.z));
-                }
-            }
+            // Código de movimiento de arrastre eliminado.
         });
 
         const onPointerUp = (e) => {
@@ -764,30 +669,8 @@ class WebARApp {
             if (this.isPinching && pointerIds.length < 2) {
                 this.isPinching = false;
                 if (!this.videoArActive || !this.gyroActive) {
-                    if (this.manipulationMode === 'none') {
-                        this.controls.enabled = true; // Rehabilitar cámara si no hay manipulación activa
-                    }
+                    this.controls.enabled = true; // Rehabilitar cámara
                 }
-            }
-
-            if (this.isTranslatingModel) {
-                this.isTranslatingModel = false;
-                if (this.placedModel) {
-                    this.physics.positionY = this.placedModel.position.y;
-                    this.physics.velocityY = 0.0;
-                    this.physics.isSimulating = true;
-                }
-                return;
-            }
-
-            if (this.isRotatingModel) {
-                this.isRotatingModel = false;
-                return;
-            }
-
-            if (this.isScalingModel) {
-                this.isScalingModel = false;
-                return;
             }
 
             // Código de finalización de arrastre eliminado.
@@ -1114,12 +997,6 @@ class WebARApp {
         if (instr) {
             instr.style.opacity = '0';
         }
-
-        // Mostrar panel de manipulación lateral izquierdo
-        const manipPanel = document.getElementById('manipulation-panel');
-        if (manipPanel) {
-            manipPanel.classList.add('visible');
-        }
     }
 
 
@@ -1362,17 +1239,9 @@ class WebARApp {
             drawer.classList.remove('ar-visible');
         }
 
-        // Ocultar rejilla del simulador
+        // Restaurar rejilla del simulador
         this.gridHelper.visible = true;
         this.shadowPlane.visible = true;
-        
-        // Ocultar panel de manipulación lateral y resetear estado
-        const manipPanel = document.getElementById('manipulation-panel');
-        if (manipPanel) {
-            manipPanel.classList.remove('visible');
-            document.querySelectorAll('.manipulation-btn').forEach(b => b.classList.remove('active'));
-        }
-        this.manipulationMode = 'none';
         
         // Restaurar letrero de instrucciones
         const instr = document.getElementById('instructions-overlay');
@@ -1783,14 +1652,6 @@ class WebARApp {
         if (drawer) {
             drawer.classList.remove('ar-visible');
         }
-        
-        // Ocultar panel de manipulación lateral y resetear estado
-        const manipPanel = document.getElementById('manipulation-panel');
-        if (manipPanel) {
-            manipPanel.classList.remove('visible');
-            document.querySelectorAll('.manipulation-btn').forEach(b => b.classList.remove('active'));
-        }
-        this.manipulationMode = 'none';
 
         // 3. Restaurar escena 3D
         this.gridHelper.visible = true;
