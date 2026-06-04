@@ -217,26 +217,6 @@
         </div>
     </div>
 
-    <!-- Menú de Interacciones Lateral Izquierdo -->
-    <div id="interaction-menu" class="interaction-menu">
-        <button id="btn-mode-move" class="menu-btn active" title="Mover Modelo">
-            <span class="btn-icon">🖐️</span>
-            <span class="btn-tooltip">Mover</span>
-        </button>
-        <button id="btn-mode-rotate" class="menu-btn" title="Rotar Modelo">
-            <span class="btn-icon">🔄</span>
-            <span class="btn-tooltip">Rotar</span>
-        </button>
-        <button id="btn-mode-scale" class="menu-btn" title="Escalar Modelo">
-            <span class="btn-icon">📐</span>
-            <span class="btn-tooltip">Escalar</span>
-        </button>
-        <button id="btn-mode-quicklook" class="menu-btn quicklook-btn" title="Ver en AR Quick Look" style="display: none;">
-            <span class="btn-icon">🕶️</span>
-            <span class="btn-tooltip">Quick Look</span>
-        </button>
-    </div>
-
     <!-- Scripts de la Aplicación (Estructura modular cargada secuencialmente) -->
     <script src="js/db.js"></script>
     <script src="js/physics.js"></script>
@@ -277,6 +257,21 @@
             </div>
             <button id="btn-ar-cancel" class="modal-btn-cancel">Cancelar</button>
         </div>
+    </div>
+    <!-- Panel Flotante de Manipulación Lateral Izquierda (Solo visible cuando hay un modelo colocado) -->
+    <div id="manipulation-panel" class="manipulation-panel">
+        <button id="btn-mode-move" class="manipulation-btn" data-mode="move" title="Mover Objeto">
+            <span class="manipulation-icon">🖐️</span>
+            <span class="manipulation-label">Mover</span>
+        </button>
+        <button id="btn-mode-rotate" class="manipulation-btn" data-mode="rotate" title="Rotar Objeto">
+            <span class="manipulation-icon">🔄</span>
+            <span class="manipulation-label">Rotar</span>
+        </button>
+        <button id="btn-mode-scale" class="manipulation-btn" data-mode="scale" title="Escalar Objeto">
+            <span class="manipulation-icon">📏</span>
+            <span class="manipulation-label">Escalar</span>
+        </button>
     </div>
 </body>
 </html>
