@@ -9,6 +9,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import { USDZExporter } from 'three/addons/exporters/USDZExporter.js';
 
 class WebARApp {
     constructor() {
@@ -39,6 +40,11 @@ class WebARApp {
         this.xrSession = null;
         this.hitTestSource = null;
         this.localRefSpace = null;
+
+        // Modo de AR detectado: 'webxr' (Android/WebXR Viewer), 'quicklook' (iOS Safari/Chrome) o 'none'
+        this.arMode = 'none';
+        // Contador de frames consecutivos sin resultados de hit-test (para fallback en WebXR Viewer iOS)
+        this.noHitFrames = 0;
 
         // UI State
         this.activeModelId = 'preset_cube'; // ID del modelo seleccionado
@@ -236,16 +242,47 @@ class WebARApp {
         if (navigator.xr) {
             navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
                 if (supported) {
+                    this.arMode = 'webxr';
                     statusDot.className = 'status-dot active';
                     statusText.textContent = 'AR WebXR Disponible';
                     arButton.style.display = 'flex';
                 } else {
-                    this.setSimulatorStatus();
+                    this.trySetupQuickLook();
                 }
             }).catch(() => {
-                this.setSimulatorStatus();
+                this.trySetupQuickLook();
             });
         } else {
+            this.trySetupQuickLook();
+        }
+    }
+
+    /**
+     * Fallback de AR para iOS Safari/Chrome (donde WebXR immersive-ar no existe).
+     * Detecta soporte de AR Quick Look y, de existir, habilita el botón AR en modo Quick Look.
+     */
+    trySetupQuickLook() {
+        const arButton = document.getElementById('ar-toggle');
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+
+        // Detectar iOS (incluye iPadOS que se reporta como MacIntel con pantalla táctil)
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+            (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+        // Detectar soporte nativo de AR Quick Look (anchor rel="ar")
+        const anchor = document.createElement('a');
+        const quickLookSupported = isIOS && anchor.relList && anchor.relList.supports &&
+            anchor.relList.supports('ar');
+
+        if (quickLookSupported) {
+            this.arMode = 'quicklook';
+            statusDot.className = 'status-dot active';
+            statusText.textContent = 'AR Quick Look (iOS)';
+            arButton.style.display = 'flex';
+            this.showToast('AR nativo de iOS disponible (Quick Look).', 'info');
+        } else {
+            this.arMode = 'none';
             this.setSimulatorStatus();
         }
     }
@@ -387,7 +424,11 @@ class WebARApp {
         // Botón WebXR AR
         const arButton = document.getElementById('ar-toggle');
         arButton.addEventListener('click', () => {
-            this.toggleXRSession();
+            if (this.arMode === 'quicklook') {
+                this.launchQuickLook();
+            } else {
+                this.toggleXRSession();
+            }
         });
 
         // Botón de Ajustes en AR
@@ -1000,6 +1041,54 @@ class WebARApp {
         }
     }
 
+    /**
+     * Lanza AR Quick Look nativo en iOS Safari/Chrome.
+     * Exporta el modelo actual (con su color, material y deformación horneados) a USDZ
+     * en el propio navegador usando USDZExporter, y abre el visor AR nativo de Apple.
+     * Nota: Quick Look muestra el modelo estático; el motor de físicas/deformación en vivo
+     * es código Three.js que el visor nativo no ejecuta.
+     */
+    async launchQuickLook() {
+        const source = this.placedModel || this.activeModel;
+        if (!source) {
+            this.showToast('Selecciona o coloca un modelo primero.', 'warning');
+            return;
+        }
+
+        this.showToast('Generando vista AR para iOS...', 'info');
+
+        try {
+            // Clonar el modelo para no alterar la escena en vivo
+            const exportRoot = source.clone(true);
+
+            // Hornear la deformación/escala actual si proviene del modelo colocado
+            if (this.placedModel) {
+                exportRoot.scale.copy(this.placedModel.scale);
+            }
+            exportRoot.updateMatrixWorld(true);
+
+            const exporter = new USDZExporter();
+            const usdzData = await exporter.parse(exportRoot);
+            const blob = new Blob([usdzData], { type: 'model/vnd.usdz+zip' });
+            const url = URL.createObjectURL(blob);
+
+            // AR Quick Look se dispara con un <a rel="ar"> que contiene un <img>
+            const anchor = document.createElement('a');
+            anchor.setAttribute('rel', 'ar');
+            anchor.appendChild(document.createElement('img'));
+            anchor.href = url;
+            document.body.appendChild(anchor);
+            anchor.click();
+            document.body.removeChild(anchor);
+
+            // Liberar memoria tras dar tiempo a que iOS cargue el archivo
+            setTimeout(() => URL.revokeObjectURL(url), 15000);
+        } catch (err) {
+            console.error('Error al generar USDZ para Quick Look:', err);
+            this.showToast('No se pudo generar la vista AR de iOS.', 'error');
+        }
+    }
+
     onXRSessionStarted(session) {
         this.xrSession = session;
         document.body.classList.add('ar-active');
@@ -1027,6 +1116,7 @@ class WebARApp {
         this.arModelPlaced = false;
         this.lastValidReticlePosition = null;
         this.lastValidReticleRotation = null;
+        this.noHitFrames = 0;
 
         // Obtener espacio de referencia
         this.renderer.xr.setReferenceSpaceType('local');
@@ -1127,6 +1217,37 @@ class WebARApp {
     }
 
     /**
+     * Calcula una posición de colocación ~1 m frente a la cámara WebXR, a una altura
+     * estimada de suelo. Se usa como fallback cuando el hit-test no devuelve superficies
+     * (caso típico de WebXR Viewer en iOS), para que el modelo siempre pueda colocarse.
+     * @returns {THREE.Vector3|null}
+     */
+    getFallbackPlacementPosition() {
+        const xrCamera = this.renderer.xr.getCamera();
+        if (!xrCamera) return null;
+
+        const camPos = new THREE.Vector3();
+        xrCamera.getWorldPosition(camPos);
+
+        const camDir = new THREE.Vector3();
+        xrCamera.getWorldDirection(camDir);
+
+        // Aplanar la dirección al plano horizontal para colocar sobre un "suelo" frente al usuario
+        camDir.y = 0;
+        if (camDir.lengthSq() < 1e-6) {
+            camDir.set(0, 0, -1);
+        }
+        camDir.normalize();
+
+        const point = camPos.clone().add(camDir.multiplyScalar(1.0));
+        // Estimar el suelo ~1.3 m por debajo de la altura de los ojos
+        point.y = camPos.y - 1.3;
+
+        if (isNaN(point.x) || isNaN(point.y) || isNaN(point.z)) return null;
+        return point;
+    }
+
+    /**
      * Bucle de actualización y dibujo
      */
     render(time, frame) {
@@ -1166,6 +1287,9 @@ class WebARApp {
                 const hitTestResults = frame.getHitTestResults(this.hitTestSource);
 
                 if (hitTestResults.length > 0) {
+                    // El hit-test funciona: reiniciar el contador de fallback
+                    this.noHitFrames = 0;
+
                     const hit = hitTestResults[0];
                     const pose = hit.getPose(referenceSpace);
 
@@ -1206,7 +1330,32 @@ class WebARApp {
                         this.reticle.visible = false;
                     }
                 } else {
-                    this.reticle.visible = false;
+                    // Sin superficies detectadas: tras ~1.5s usar fallback frente a la cámara.
+                    // Necesario en WebXR Viewer (iOS), cuyo hit-test suele no devolver resultados.
+                    this.noHitFrames++;
+
+                    if (this.noHitFrames > 90) {
+                        const fallbackPos = this.getFallbackPlacementPosition();
+                        if (fallbackPos) {
+                            this.reticle.visible = true;
+                            this.reticle.matrix.makeTranslation(fallbackPos.x, fallbackPos.y, fallbackPos.z);
+
+                            if (!this.lastValidReticlePosition) {
+                                this.lastValidReticlePosition = new THREE.Vector3();
+                            }
+                            this.lastValidReticlePosition.copy(fallbackPos);
+
+                            const instr = document.getElementById('instructions-overlay');
+                            if (instr && !this.placedModel) {
+                                instr.style.opacity = '1';
+                                instr.textContent = 'No se detectan superficies. Toca la pantalla para colocar el modelo frente a ti.';
+                            }
+                        } else {
+                            this.reticle.visible = false;
+                        }
+                    } else {
+                        this.reticle.visible = false;
+                    }
                 }
             }
         }
