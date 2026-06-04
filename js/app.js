@@ -75,6 +75,14 @@ class WebARApp {
         this.lastTouchY = 0;
         this.lastValidReticlePosition = null;
         this.lastValidReticleRotation = null;
+
+        // Video AR y giroscopio (híbrido iOS Safari)
+        this.videoArActive = false;
+        this.videoStream = null;
+        this.gyroActive = false;
+        this.initialOrientation = null;
+        this.initialCameraQuaternion = null;
+        this.handleDeviceOrientationBound = null;
     }
 
     /**
@@ -425,11 +433,47 @@ class WebARApp {
         const arButton = document.getElementById('ar-toggle');
         arButton.addEventListener('click', () => {
             if (this.arMode === 'quicklook') {
-                this.launchQuickLook();
+                const modal = document.getElementById('ar-selector-modal');
+                if (modal) modal.classList.add('show');
             } else {
                 this.toggleXRSession();
             }
         });
+
+        // Botones del Modal Selector AR
+        const btnArInteractive = document.getElementById('btn-ar-interactive');
+        if (btnArInteractive) {
+            btnArInteractive.addEventListener('click', () => {
+                const modal = document.getElementById('ar-selector-modal');
+                if (modal) modal.classList.remove('show');
+                this.startVideoAR();
+            });
+        }
+
+        const btnArQuicklook = document.getElementById('btn-ar-quicklook');
+        if (btnArQuicklook) {
+            btnArQuicklook.addEventListener('click', () => {
+                const modal = document.getElementById('ar-selector-modal');
+                if (modal) modal.classList.remove('show');
+                this.launchQuickLook();
+            });
+        }
+
+        const btnArCancel = document.getElementById('btn-ar-cancel');
+        if (btnArCancel) {
+            btnArCancel.addEventListener('click', () => {
+                const modal = document.getElementById('ar-selector-modal');
+                if (modal) modal.classList.remove('show');
+            });
+        }
+
+        // Botón para salir del modo Video AR
+        const btnExitVideoAr = document.getElementById('btn-exit-video-ar');
+        if (btnExitVideoAr) {
+            btnExitVideoAr.addEventListener('click', () => {
+                this.stopVideoAR();
+            });
+        }
 
         // Botón de Ajustes en AR
         const settingsToggle = document.getElementById('settings-toggle');
@@ -630,12 +674,16 @@ class WebARApp {
 
             if (this.isPinching && pointerIds.length < 2) {
                 this.isPinching = false;
-                this.controls.enabled = true; // Rehabilitar cámara
+                if (!this.videoArActive || !this.gyroActive) {
+                    this.controls.enabled = true; // Rehabilitar cámara
+                }
             }
 
             if (this.isDragging) {
                 this.isDragging = false;
-                this.controls.enabled = true; // Rehabilitar cámara
+                if (!this.videoArActive || !this.gyroActive) {
+                    this.controls.enabled = true; // Rehabilitar cámara
+                }
                 
                 // Soltar objeto: reiniciar caída libre de físicas desde la altura actual
                 if (this.placedModel) {
@@ -1441,6 +1489,204 @@ class WebARApp {
         this.toastTimeout = setTimeout(() => {
             toast.className = '';
         }, 3000);
+    }
+
+    /**
+     * Inicia la experiencia AR interactiva con video en iOS Safari
+     */
+    async startVideoAR() {
+        this.videoArActive = true;
+        this.gyroActive = false;
+        this.initialOrientation = null;
+
+        // 1. Solicitar acceso a la cámara trasera
+        const video = document.getElementById('ar-video-background');
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'environment' },
+                audio: false
+            });
+            this.videoStream = stream;
+            if (video) {
+                video.srcObject = stream;
+                video.style.display = 'block';
+                video.setAttribute('autoplay', '');
+                video.setAttribute('playsinline', '');
+                video.play().catch(err => console.error("Error al reproducir video:", err));
+            }
+        } catch (err) {
+            console.error("Error de acceso a la cámara:", err);
+            this.showToast("No se pudo acceder a la cámara. Iniciando sin video de fondo.", "error");
+        }
+
+        // 2. Modificar clases de interfaz
+        document.body.classList.add('ar-active');
+        const exitContainer = document.getElementById('exit-ar-container');
+        if (exitContainer) {
+            exitContainer.style.display = 'block';
+        }
+
+        // Mostrar botón de ajustes en AR
+        const settingsBtn = document.getElementById('settings-button-container');
+        if (settingsBtn) {
+            settingsBtn.style.display = 'block';
+        }
+
+        // 3. Modificar escena 3D
+        this.gridHelper.visible = false;
+        this.previousFog = this.scene.fog;
+        this.scene.fog = null;
+        this.previousShadowMapEnabled = this.renderer.shadowMap.enabled;
+        this.renderer.shadowMap.enabled = true; // Habilitar sombras en la mesa virtual
+
+        // 4. Solicitar permiso de giroscopio y configurar DeviceOrientation
+        this.handleDeviceOrientationBound = this.handleDeviceOrientation.bind(this);
+        
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+            try {
+                const permissionState = await DeviceOrientationEvent.requestPermission();
+                if (permissionState === 'granted') {
+                    window.addEventListener('deviceorientation', this.handleDeviceOrientationBound);
+                    this.gyroActive = true;
+                    this.controls.enabled = false; // Desactivar OrbitControls si el giroscopio está activo
+                    this.showToast("Giroscopio activado para seguimiento AR.");
+                } else {
+                    this.showToast("Giroscopio denegado. Usando arrastre para rotar la cámara.", "info");
+                }
+            } catch (err) {
+                console.warn("Giroscopio no permitido o fallido:", err);
+                this.showToast("Usa arrastre táctil para rotar la vista.", "info");
+            }
+        } else {
+            // Android u otros navegadores
+            window.addEventListener('deviceorientation', this.handleDeviceOrientationBound);
+            this.gyroActive = true;
+            this.controls.enabled = false;
+        }
+
+        // 5. Configurar letrero de instrucciones
+        const instr = document.getElementById('instructions-overlay');
+        if (instr) {
+            if (this.placedModel) {
+                instr.style.opacity = '0';
+            } else {
+                instr.style.opacity = '1';
+                instr.textContent = 'Toca la pantalla para colocar el modelo sobre el suelo...';
+            }
+        }
+
+        this.showToast("AR Interactivo iniciado.");
+    }
+
+    /**
+     * Termina la experiencia AR interactiva con video en iOS Safari
+     */
+    stopVideoAR() {
+        this.videoArActive = false;
+        this.gyroActive = false;
+        this.initialOrientation = null;
+
+        // 1. Detener la transmisión de la cámara
+        if (this.videoStream) {
+            this.videoStream.getTracks().forEach(track => track.stop());
+            this.videoStream = null;
+        }
+        const video = document.getElementById('ar-video-background');
+        if (video) {
+            video.srcObject = null;
+            video.style.display = 'none';
+        }
+
+        // 2. Restaurar clases de interfaz
+        document.body.classList.remove('ar-active');
+        const exitContainer = document.getElementById('exit-ar-container');
+        if (exitContainer) {
+            exitContainer.style.display = 'none';
+        }
+        const settingsBtn = document.getElementById('settings-button-container');
+        if (settingsBtn) {
+            settingsBtn.style.display = 'none';
+        }
+        const drawer = document.getElementById('control-drawer');
+        if (drawer) {
+            drawer.classList.remove('ar-visible');
+        }
+
+        // 3. Restaurar escena 3D
+        this.gridHelper.visible = true;
+        if (this.previousFog) {
+            this.scene.fog = this.previousFog;
+        }
+        if (this.previousShadowMapEnabled !== undefined) {
+            this.renderer.shadowMap.enabled = this.previousShadowMapEnabled;
+        }
+
+        // 4. Detener evento del giroscopio
+        if (this.handleDeviceOrientationBound) {
+            window.removeEventListener('deviceorientation', this.handleDeviceOrientationBound);
+            this.handleDeviceOrientationBound = null;
+        }
+
+        // 5. Rehabilitar y reajustar controles orbitales de cámara
+        this.controls.enabled = true;
+        this.controls.reset();
+        this.camera.position.set(0, 1.6, 2.5);
+        this.controls.target.set(0, 0.5, 0);
+        this.controls.update();
+
+        // 6. Restaurar letrero de instrucciones
+        const instr = document.getElementById('instructions-overlay');
+        if (instr) {
+            if (this.placedModel) {
+                instr.style.opacity = '0';
+            } else {
+                instr.style.opacity = '1';
+                instr.textContent = 'Haz clic en la cuadrícula para colocar el objeto seleccionado';
+            }
+        }
+
+        this.showToast("Modo AR Interactivo cerrado.");
+    }
+
+    /**
+     * Controlador del giroscopio para orientar la cámara en el modo Video AR
+     */
+    handleDeviceOrientation(event) {
+        if (!this.videoArActive) return;
+
+        const alpha = event.alpha;
+        const beta = event.beta;
+        const gamma = event.gamma;
+
+        if (alpha === null || beta === null || gamma === null || isNaN(alpha) || isNaN(beta) || isNaN(gamma)) return;
+
+        const alphaRad = THREE.MathUtils.degToRad(alpha);
+        const betaRad = THREE.MathUtils.degToRad(beta);
+        const gammaRad = THREE.MathUtils.degToRad(gamma);
+
+        if (this.initialOrientation === null) {
+            this.initialOrientation = {
+                alpha: alphaRad,
+                beta: betaRad,
+                gamma: gammaRad
+            };
+            this.initialCameraQuaternion = this.camera.quaternion.clone();
+            return;
+        }
+
+        const dAlpha = alphaRad - this.initialOrientation.alpha;
+        const dBeta = betaRad - this.initialOrientation.beta;
+        const dGamma = gammaRad - this.initialOrientation.gamma;
+
+        // Mapear diferencias relativas de orientación del giroscopio a rotaciones 3D.
+        // Pitch (beta) gira alrededor del eje X.
+        // Yaw (alpha) gira alrededor del eje Y.
+        // Roll (gamma) gira alrededor del eje Z (invertido).
+        const euler = new THREE.Euler(dBeta, dAlpha, -dGamma, 'YXZ');
+        const relativeQuat = new THREE.Quaternion().setFromEuler(euler);
+
+        // Multiplicar la rotación inicial por la rotación calculada del giroscopio
+        this.camera.quaternion.copy(this.initialCameraQuaternion).multiply(relativeQuat);
     }
 }
 

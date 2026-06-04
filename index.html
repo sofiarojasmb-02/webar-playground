@@ -48,6 +48,16 @@
         </div>
     </header>
 
+    <!-- Video de fondo para AR Interactivo en iOS Safari -->
+    <video id="ar-video-background" autoplay playsinline muted></video>
+
+    <!-- Botón Flotante para Salir de AR Interactivo -->
+    <div id="exit-ar-container" style="display: none;">
+        <button id="btn-exit-video-ar" class="btn-exit-ar">
+            ✕ Salir AR
+        </button>
+    </div>
+
     <!-- Contenedor del Lienzo WebGL -->
     <div id="canvas-container"></div>
 
@@ -212,5 +222,30 @@
             colorDot.style.backgroundColor = e.target.value;
         });
     </script>
+
+    <!-- Modal Selector de Modo AR (para iOS Safari/Chrome) -->
+    <div id="ar-selector-modal" class="modal-overlay">
+        <div class="modal-card">
+            <h2 class="modal-title">Selecciona el Modo AR</h2>
+            <p class="modal-desc">Elige cómo quieres experimentar la Realidad Aumentada en tu iPhone:</p>
+            <div class="modal-options">
+                <button id="btn-ar-interactive" class="modal-btn btn-primary">
+                    <span class="btn-icon">🎮</span>
+                    <div class="btn-text-group">
+                        <span class="btn-title">AR Interactivo</span>
+                        <span class="btn-subtitle">Usa controles, físicas y cambia colores en tiempo real</span>
+                    </div>
+                </button>
+                <button id="btn-ar-quicklook" class="modal-btn">
+                    <span class="btn-icon">🕶️</span>
+                    <div class="btn-text-group">
+                        <span class="btn-title">AR Quick Look</span>
+                        <span class="btn-subtitle">Visualización realista en 3D nativa de Apple</span>
+                    </div>
+                </button>
+            </div>
+            <button id="btn-ar-cancel" class="modal-btn-cancel">Cancelar</button>
+        </div>
+    </div>
 </body>
 </html>
