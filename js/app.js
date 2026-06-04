@@ -905,6 +905,12 @@ class WebARApp {
         this.physics.startDrop(position.y);
 
         this.showToast('Modelo colocado en la superficie.');
+
+        // Ocultar letrero de instrucciones de forma inmediata
+        const instr = document.getElementById('instructions-overlay');
+        if (instr) {
+            instr.style.opacity = '0';
+        }
     }
 
 
@@ -985,6 +991,17 @@ class WebARApp {
         
         session.addEventListener('end', () => this.onXRSessionEnded());
 
+        // Configurar letrero de instrucciones inicial en AR
+        const instr = document.getElementById('instructions-overlay');
+        if (instr) {
+            if (this.placedModel) {
+                instr.style.opacity = '0';
+            } else {
+                instr.style.opacity = '1';
+                instr.textContent = 'Mueve tu dispositivo para escanear superficies...';
+            }
+        }
+
         // Resetear bandera de colocación en AR
         this.arModelPlaced = false;
 
@@ -1059,6 +1076,17 @@ class WebARApp {
         this.gridHelper.visible = true;
         this.shadowPlane.visible = true;
         
+        // Restaurar letrero de instrucciones
+        const instr = document.getElementById('instructions-overlay');
+        if (instr) {
+            if (this.placedModel) {
+                instr.style.opacity = '0';
+            } else {
+                instr.style.opacity = '1';
+                instr.textContent = 'Haz clic en la cuadrícula para colocar el objeto seleccionado';
+            }
+        }
+
         this.showToast('Sesión AR terminada.');
     }
 
@@ -1110,10 +1138,15 @@ class WebARApp {
                             this.reticle.visible = true;
                             this.reticle.matrix.fromArray(matrix);
                             
-                            // Mostrar recordatorio si no hay modelo colocado
+                            // Mostrar o esconder recordatorio según si hay modelo colocado
                             const instr = document.getElementById('instructions-overlay');
-                            if (!this.placedModel && instr) {
-                                instr.textContent = '¡Superficie detectada! Toca la pantalla para colocar el modelo.';
+                            if (instr) {
+                                if (!this.placedModel) {
+                                    instr.style.opacity = '1';
+                                    instr.textContent = '¡Superficie detectada! Toca la pantalla para colocar el modelo.';
+                                } else {
+                                    instr.style.opacity = '0';
+                                }
                             }
                         } else {
                             this.reticle.visible = false;
@@ -1127,20 +1160,8 @@ class WebARApp {
             }
         }
 
-        // Sincronizar altura del suelo en AR en tiempo real con la retícula
-        if (this.xrSession && this.reticle.visible) {
-            const reticlePos = new THREE.Vector3().setFromMatrixPosition(this.reticle.matrix);
-            if (!isNaN(reticlePos.y)) {
-                this.physics.groundY = reticlePos.y;
-                
-                // Si el modelo está colocado y en reposo (sin simular y sin arrastrar), mantenerlo pegado al suelo
-                if (this.placedModel && !this.isDragging && !this.physics.isSimulating) {
-                    if (!isNaN(this.physics.groundY)) {
-                        this.placedModel.position.y = this.physics.groundY;
-                    }
-                }
-            }
-        }
+        // La altura del suelo (groundY) se establece al colocar/arrastrar el modelo, y se mantiene fija
+        // para evitar que el modelo flote o se hunda cuando la cámara apunta hacia otras superficies en AR.
 
         // 2. Actualizar simulación de físicas
         if (this.physics.isSimulating && this.placedModel) {
