@@ -67,6 +67,8 @@ class WebARApp {
         this.arModelPlaced = false;
         this.lastTouchX = 0;
         this.lastTouchY = 0;
+        this.lastValidReticlePosition = null;
+        this.lastValidReticleRotation = null;
     }
 
     /**
@@ -614,23 +616,30 @@ class WebARApp {
                 }
 
                 this.updateMouseCoords(e);
-                const camera = this.xrSession ? this.renderer.xr.getCamera() : this.camera;
-                this.raycaster.setFromCamera(this.mouse, camera);
 
-                const intersects = this.placedModel ? this.raycaster.intersectObject(this.placedModel, true) : [];
-                if (intersects.length > 0) {
+                let hitModel = false;
+                if (this.placedModel) {
+                    try {
+                        const camera = this.xrSession ? this.renderer.xr.getCamera() : this.camera;
+                        if (camera) {
+                            this.raycaster.setFromCamera(this.mouse, camera);
+                            const intersects = this.raycaster.intersectObject(this.placedModel, true);
+                            if (intersects.length > 0) {
+                                hitModel = true;
+                            }
+                        }
+                    } catch (err) {
+                        console.warn("Fallo en raycast, ignorando colisión:", err);
+                    }
+                }
+
+                if (hitModel) {
                     // Si tocamos el modelo: relanzar físicas (rebote) pero NO abrir panel de control
                     this.triggerBounceDrop();
                 } else {
-                    // Si no tocamos el modelo, colocamos/reposicionamos el modelo en la retícula
-                    if (this.reticle.visible) {
-                        const position = new THREE.Vector3().setFromMatrixPosition(this.reticle.matrix);
-                        // Validar contra valores NaN para evitar que el modelo desaparezca
-                        if (!isNaN(position.x) && !isNaN(position.y) && !isNaN(position.z)) {
-                            this.placeModel(position);
-                        } else {
-                            console.warn("Posición de la retícula contiene NaN, ignorando colocación.");
-                        }
+                    // Si no tocamos el modelo, colocamos/reposicionamos el modelo en la última posición válida
+                    if (this.lastValidReticlePosition) {
+                        this.placeModel(this.lastValidReticlePosition);
                     }
                 }
             }
@@ -974,7 +983,7 @@ class WebARApp {
         if (!this.xrSession) {
             // Solicitar sesión AR
             const sessionInit = {
-                requiredFeatures: ['hit-test'],
+                requiredFeatures: ['local', 'hit-test'],
                 optionalFeatures: ['dom-overlay'],
                 domOverlay: { root: document.body }
             };
@@ -1014,8 +1023,10 @@ class WebARApp {
             }
         }
 
-        // Resetear bandera de colocación en AR
+        // Resetear bandera de colocación en AR y posiciones de retícula
         this.arModelPlaced = false;
+        this.lastValidReticlePosition = null;
+        this.lastValidReticleRotation = null;
 
         // Obtener espacio de referencia
         this.renderer.xr.setReferenceSpaceType('local');
@@ -1039,29 +1050,34 @@ class WebARApp {
             }
 
             // 1. Raycast desde la cámara activa de WebXR para ver si toca el modelo colocado
+            let hitModel = false;
             if (this.placedModel) {
-                const camera = this.renderer.xr.getCamera();
-                const mouseX = ((this.lastTouchX || 0) / window.innerWidth) * 2 - 1;
-                const mouseY = -((this.lastTouchY || 0) / window.innerHeight) * 2 + 1;
-                const touchCoords = new THREE.Vector2(mouseX, mouseY);
-                this.raycaster.setFromCamera(touchCoords, camera);
+                try {
+                    const camera = this.renderer.xr.getCamera();
+                    if (camera) {
+                        const mouseX = ((this.lastTouchX || 0) / window.innerWidth) * 2 - 1;
+                        const mouseY = -((this.lastTouchY || 0) / window.innerHeight) * 2 + 1;
+                        const touchCoords = new THREE.Vector2(mouseX, mouseY);
+                        this.raycaster.setFromCamera(touchCoords, camera);
 
-                const intersects = this.raycaster.intersectObject(this.placedModel, true);
-                if (intersects.length > 0) {
-                    this.triggerBounceDrop();
-                    return;
+                        const intersects = this.raycaster.intersectObject(this.placedModel, true);
+                        if (intersects.length > 0) {
+                            hitModel = true;
+                        }
+                    }
+                } catch (err) {
+                    console.warn("Fallo en raycast en AR, ignorando colisión:", err);
                 }
             }
 
-            // 2. Si no toca el modelo, colocar/reposicionar en la retícula
-            if (this.reticle.visible) {
-                const position = new THREE.Vector3().setFromMatrixPosition(this.reticle.matrix);
-                // Validar contra valores NaN para evitar que el modelo desaparezca
-                if (!isNaN(position.x) && !isNaN(position.y) && !isNaN(position.z)) {
-                    this.placeModel(position);
-                } else {
-                    console.warn("Posición de la retícula en AR contiene NaN, ignorando colocación.");
-                }
+            if (hitModel) {
+                this.triggerBounceDrop();
+                return;
+            }
+
+            // 2. Si no toca el modelo, colocar/reposicionar en la última posición válida de la retícula
+            if (this.lastValidReticlePosition) {
+                this.placeModel(this.lastValidReticlePosition);
             }
         });
         this.scene.add(controller);
@@ -1134,6 +1150,12 @@ class WebARApp {
                 // Actualizar matriz de la retícula
                 const matrix = new THREE.Matrix4().makeTranslation(point.x, point.y, point.z);
                 this.reticle.matrix.copy(matrix);
+
+                // Guardar la última posición válida en simulador
+                if (!this.lastValidReticlePosition) {
+                    this.lastValidReticlePosition = new THREE.Vector3();
+                }
+                this.lastValidReticlePosition.copy(point);
             } else {
                 this.reticle.visible = false;
             }
@@ -1160,6 +1182,12 @@ class WebARApp {
                         if (!hasNaN) {
                             this.reticle.visible = true;
                             this.reticle.matrix.fromArray(matrix);
+                            
+                            // Guardar la última posición y rotación válidas de la retícula en AR
+                            if (!this.lastValidReticlePosition) {
+                                this.lastValidReticlePosition = new THREE.Vector3();
+                            }
+                            this.lastValidReticlePosition.setFromMatrixPosition(this.reticle.matrix);
                             
                             // Mostrar o esconder recordatorio según si hay modelo colocado
                             const instr = document.getElementById('instructions-overlay');

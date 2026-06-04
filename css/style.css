@@ -665,3 +665,9 @@ body.ar-active #settings-button-container {
         transform: translateY(470px); /* Deja visible solo el tirador en la esquina inferior */
     }
 }
+
+/* Transparencia para el fondo de la página en AR */
+body.ar-active {
+    background: transparent !important;
+    background-color: transparent !important;
+}
