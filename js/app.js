@@ -83,8 +83,10 @@ class WebARApp {
 
         // Configurar colisión en físicas para squash elástico (efecto gelatina)
         this.physics.onCollision = (impactVelocity) => {
-            this.squashAmount = Math.min(0.5, impactVelocity * 0.05); // Aplastar hasta un 50% max
-            this.squashTimer = 0.0;
+            if (!isNaN(impactVelocity) && isFinite(impactVelocity)) {
+                this.squashAmount = Math.min(0.5, impactVelocity * 0.05); // Aplastar hasta un 50% max
+                this.squashTimer = 0.0;
+            }
         };
 
         // Cargar modelo predeterminado por defecto
@@ -138,6 +140,10 @@ class WebARApp {
      * Iluminación de la escena
      */
     setupLights() {
+        // Luz de ambiente para iluminación base uniforme en AR (evita modelos oscuros)
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
+        this.scene.add(ambientLight);
+
         // Luz hemisférica con tonos morados (cielo) y azules (suelo)
         const hemiLight = new THREE.HemisphereLight(0xa855f7, 0x06b6d4, 0.6);
         hemiLight.position.set(0, 5, 0);
@@ -991,6 +997,12 @@ class WebARApp {
         
         session.addEventListener('end', () => this.onXRSessionEnded());
 
+        // Desactivar niebla y sombras en AR para rendimiento y compatibilidad en iOS (WebXR Viewer)
+        this.previousFog = this.scene.fog;
+        this.scene.fog = null;
+        this.previousShadowMapEnabled = this.renderer.shadowMap.enabled;
+        this.renderer.shadowMap.enabled = false;
+
         // Configurar letrero de instrucciones inicial en AR
         const instr = document.getElementById('instructions-overlay');
         if (instr) {
@@ -1066,6 +1078,14 @@ class WebARApp {
         this.hitTestSource = null;
         document.body.classList.remove('ar-active');
 
+        // Restaurar niebla y sombras para el simulador de escritorio
+        if (this.previousFog) {
+            this.scene.fog = this.previousFog;
+        }
+        if (this.previousShadowMapEnabled !== undefined) {
+            this.renderer.shadowMap.enabled = this.previousShadowMapEnabled;
+        }
+
         // Restaurar estado de visibilidad del panel de control
         const drawer = document.getElementById('control-drawer');
         if (drawer) {
@@ -1094,7 +1114,10 @@ class WebARApp {
      * Bucle de actualización y dibujo
      */
     render(time, frame) {
-        const dt = this.clock.getDelta();
+        let dt = this.clock.getDelta();
+        if (isNaN(dt) || dt < 0 || dt > 0.1) {
+            dt = 0.016; // Fallback estable a ~60fps si hay saltos de frames en el renderizado
+        }
 
         // 1. Actualizar controles de cámara orbital (solo en simulador)
         if (!this.xrSession) {
