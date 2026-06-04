@@ -88,6 +88,14 @@ class WebARApp {
         this.inflateAmount = 0.0;
         this.inflateTimer = 0.0;
         this.currentMaterialType = 'solid';
+
+        // Menú lateral y transformaciones manuales
+        this.interactionMode = 'move'; // 'move', 'rotate', 'scale'
+        this.modelScaleMultiplier = 1.0;
+        this.touchStartX = 0;
+        this.touchStartY = 0;
+        this.initialPlacedModelRotationY = 0;
+        this.initialScaleMultiplier = 1.0;
     }
 
     /**
@@ -478,37 +486,41 @@ class WebARApp {
         const arButton = document.getElementById('ar-toggle');
         arButton.addEventListener('click', () => {
             if (this.arMode === 'quicklook') {
-                const modal = document.getElementById('ar-selector-modal');
-                if (modal) modal.classList.add('show');
+                this.startVideoAR(); // Iniciar directamente el modo AR Interactivo
             } else {
                 this.toggleXRSession();
             }
         });
 
-        // Botones del Modal Selector AR
-        const btnArInteractive = document.getElementById('btn-ar-interactive');
-        if (btnArInteractive) {
-            btnArInteractive.addEventListener('click', () => {
-                const modal = document.getElementById('ar-selector-modal');
-                if (modal) modal.classList.remove('show');
-                this.startVideoAR();
-            });
-        }
+        // Botones del Menú de Interacciones Lateral Izquierdo
+        const btnModeMove = document.getElementById('btn-mode-move');
+        const btnModeRotate = document.getElementById('btn-mode-rotate');
+        const btnModeScale = document.getElementById('btn-mode-scale');
+        const btnModeQuicklook = document.getElementById('btn-mode-quicklook');
 
-        const btnArQuicklook = document.getElementById('btn-ar-quicklook');
-        if (btnArQuicklook) {
-            btnArQuicklook.addEventListener('click', () => {
-                const modal = document.getElementById('ar-selector-modal');
-                if (modal) modal.classList.remove('show');
+        const setInteractionMode = (mode) => {
+            this.interactionMode = mode;
+            [btnModeMove, btnModeRotate, btnModeScale].forEach(btn => {
+                if (btn) btn.classList.remove('active');
+            });
+            if (mode === 'move' && btnModeMove) btnModeMove.classList.add('active');
+            if (mode === 'rotate' && btnModeRotate) btnModeRotate.classList.add('active');
+            if (mode === 'scale' && btnModeScale) btnModeScale.classList.add('active');
+            this.showToast(`Modo interacción: ${mode === 'move' ? 'Mover' : mode === 'rotate' ? 'Rotar' : 'Escalar'}`);
+        };
+
+        if (btnModeMove) {
+            btnModeMove.addEventListener('click', () => setInteractionMode('move'));
+        }
+        if (btnModeRotate) {
+            btnModeRotate.addEventListener('click', () => setInteractionMode('rotate'));
+        }
+        if (btnModeScale) {
+            btnModeScale.addEventListener('click', () => setInteractionMode('scale'));
+        }
+        if (btnModeQuicklook) {
+            btnModeQuicklook.addEventListener('click', () => {
                 this.launchQuickLook();
-            });
-        }
-
-        const btnArCancel = document.getElementById('btn-ar-cancel');
-        if (btnArCancel) {
-            btnArCancel.addEventListener('click', () => {
-                const modal = document.getElementById('ar-selector-modal');
-                if (modal) modal.classList.remove('show');
             });
         }
 
@@ -591,7 +603,7 @@ class WebARApp {
                 return;
             }
 
-            // 2. Gesto de 1 dedo (Doble toque y Arrastrar)
+            // 2. Gesto de 1 dedo (Doble toque, Rotación y Escala)
             if (pointerIds.length === 1) {
                 this.isDoubleTap = false;
                 this.isPointerDown = true;
@@ -616,6 +628,18 @@ class WebARApp {
                     this.showToast('¡Modelo inflado con rebote elástico!');
                     return;
                 }
+
+                // Bloquear órbita de cámara al tocar el modelo y guardar estados iniciales
+                if (intersects.length > 0) {
+                    this.controls.enabled = false;
+                    this.touchStartX = e.clientX;
+                    this.touchStartY = e.clientY;
+                    if (this.placedModel) {
+                        this.initialPlacedModelRotationY = this.placedModel.rotation.y;
+                        this.initialScaleMultiplier = this.modelScaleMultiplier;
+                    }
+                }
+            }
             }
         });
 
@@ -656,7 +680,18 @@ class WebARApp {
                 return;
             }
 
-            // Código de movimiento de arrastre eliminado.
+            // 2. Modificaciones manuales del modelo cuando la cámara está bloqueada (toque en modelo)
+            if (this.placedModel && this.controls.enabled === false && !this.isPinching && pointerIds.length === 1) {
+                if (this.interactionMode === 'rotate') {
+                    // Rotar horizontalmente
+                    const deltaX = e.clientX - this.touchStartX;
+                    this.placedModel.rotation.y = this.initialPlacedModelRotationY + deltaX * 0.01;
+                } else if (this.interactionMode === 'scale') {
+                    // Escalar verticalmente
+                    const deltaY = this.touchStartY - e.clientY;
+                    this.modelScaleMultiplier = Math.max(0.2, Math.min(3.0, this.initialScaleMultiplier + deltaY * 0.005));
+                }
+            }
         });
 
         const onPointerUp = (e) => {
@@ -668,6 +703,13 @@ class WebARApp {
 
             if (this.isPinching && pointerIds.length < 2) {
                 this.isPinching = false;
+                if (!this.videoArActive || !this.gyroActive) {
+                    this.controls.enabled = true; // Rehabilitar cámara
+                }
+            }
+
+            // Si se soltó el modelo (controls.enabled era false)
+            if (this.controls.enabled === false) {
                 if (!this.videoArActive || !this.gyroActive) {
                     this.controls.enabled = true; // Rehabilitar cámara
                 }
@@ -1496,9 +1538,9 @@ class WebARApp {
                 }
             }
 
-            // Combinar con la deformación de volumen conservado del slider/pellizco e inflado
-            const finalScaleY = this.currentDeformation * scaleY * inflateScaleY;
-            const finalScaleXZ = (1.0 / Math.sqrt(this.currentDeformation)) * scaleXZ * inflateScaleXZ;
+            // Combinar con la deformación de volumen conservado del slider/pellizco, inflado y escala manual
+            const finalScaleY = this.modelScaleMultiplier * this.currentDeformation * scaleY * inflateScaleY;
+            const finalScaleXZ = this.modelScaleMultiplier * (1.0 / Math.sqrt(this.currentDeformation)) * scaleXZ * inflateScaleXZ;
 
             // Escalar el grupo colocado
             this.placedModel.scale.set(finalScaleXZ, finalScaleY, finalScaleXZ);
@@ -1571,6 +1613,12 @@ class WebARApp {
         const settingsBtn = document.getElementById('settings-button-container');
         if (settingsBtn) {
             settingsBtn.style.display = 'block';
+        }
+
+        // Mostrar botón Quick Look en el menú lateral
+        const qlBtn = document.getElementById('btn-mode-quicklook');
+        if (qlBtn && this.arMode === 'quicklook') {
+            qlBtn.style.display = 'flex';
         }
 
         // 3. Modificar escena 3D
@@ -1652,6 +1700,21 @@ class WebARApp {
         if (drawer) {
             drawer.classList.remove('ar-visible');
         }
+
+        // Ocultar botón Quick Look en el menú lateral y resetear modo
+        const qlBtn = document.getElementById('btn-mode-quicklook');
+        if (qlBtn) {
+            qlBtn.style.display = 'none';
+        }
+        const btnModeMove = document.getElementById('btn-mode-move');
+        const btnModeRotate = document.getElementById('btn-mode-rotate');
+        const btnModeScale = document.getElementById('btn-mode-scale');
+        this.interactionMode = 'move';
+        [btnModeMove, btnModeRotate, btnModeScale].forEach(btn => {
+            if (btn) btn.classList.remove('active');
+        });
+        if (btnModeMove) btnModeMove.classList.add('active');
+        this.modelScaleMultiplier = 1.0;
 
         // 3. Restaurar escena 3D
         this.gridHelper.visible = true;
