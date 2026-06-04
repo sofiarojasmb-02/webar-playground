@@ -145,6 +145,76 @@ class MeshDeformer {
             }
         });
     }
+
+    /**
+     * Cambia el tipo de material del modelo reconstruyendo su shader para soportar refracción de vidrio, etc.
+     * @param {THREE.Object3D} model - El modelo 3D
+     * @param {string} type - Tipo de material ('solid', 'aluminum', 'glass', 'wood', 'ceramic')
+     */
+    changeMaterialType(model, type) {
+        if (!model) return;
+
+        model.traverse((child) => {
+            if (child.isMesh && child.material) {
+                const materials = Array.isArray(child.material) ? child.material : [child.material];
+                const updatedMaterials = materials.map((oldMat) => {
+                    const prevColor = oldMat.color ? oldMat.color.clone() : new THREE.Color(0x8b5cf6);
+                    const prevMap = oldMat.map;
+
+                    let newMat;
+                    if (type === 'glass') {
+                        // Vidrio refractivo de alta calidad usando MeshPhysicalMaterial
+                        newMat = new THREE.MeshPhysicalMaterial({
+                            color: prevColor,
+                            roughness: 0.1,
+                            metalness: 0.1,
+                            transmission: 0.9,     // Habilitar refracción
+                            ior: 1.5,             // Índice de refracción
+                            thickness: 0.5,        // Grosor del vidrio
+                            transparent: true,
+                            opacity: 0.6,
+                            shadowSide: THREE.DoubleSide
+                        });
+                    } else if (type === 'aluminum') {
+                        newMat = new THREE.MeshStandardMaterial({
+                            color: prevColor,
+                            roughness: 0.2,
+                            metalness: 0.9,
+                            shadowSide: THREE.DoubleSide
+                        });
+                    } else if (type === 'wood') {
+                        newMat = new THREE.MeshStandardMaterial({
+                            color: prevColor,
+                            roughness: 0.8,
+                            metalness: 0.0,
+                            shadowSide: THREE.DoubleSide
+                        });
+                    } else if (type === 'ceramic') {
+                        newMat = new THREE.MeshStandardMaterial({
+                            color: prevColor,
+                            roughness: 0.95,
+                            metalness: 0.0,
+                            shadowSide: THREE.DoubleSide
+                        });
+                    } else {
+                        // solid / estándar
+                        newMat = new THREE.MeshStandardMaterial({
+                            color: prevColor,
+                            roughness: 0.4,
+                            metalness: 0.8,
+                            shadowSide: THREE.DoubleSide
+                        });
+                    }
+
+                    if (prevMap) newMat.map = prevMap;
+                    return newMat;
+                });
+
+                child.material = Array.isArray(child.material) ? updatedMaterials : updatedMaterials[0];
+                child.material.needsUpdate = true;
+            }
+        });
+    }
 }
 
 // Exportar clase globalmente

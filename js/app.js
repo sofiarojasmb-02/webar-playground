@@ -83,6 +83,11 @@ class WebARApp {
         this.initialOrientation = null;
         this.initialCameraQuaternion = null;
         this.handleDeviceOrientationBound = null;
+
+        // Físicas de inflado y material
+        this.inflateAmount = 0.0;
+        this.inflateTimer = 0.0;
+        this.currentMaterialType = 'solid';
     }
 
     /**
@@ -406,6 +411,46 @@ class WebARApp {
             this.updateMaterialProperties();
         });
 
+        // Selector de tipo de material
+        const selectMaterialType = document.getElementById('select-material-type');
+        if (selectMaterialType) {
+            selectMaterialType.addEventListener('change', (e) => {
+                const type = e.target.value;
+                this.currentMaterialType = type;
+                
+                // Actualizar sliders con los valores preestablecidos
+                const sRoughness = document.getElementById('slider-roughness');
+                const vRoughness = document.getElementById('val-roughness');
+                const sMetalness = document.getElementById('slider-metalness');
+                const vMetalness = document.getElementById('val-metalness');
+                
+                if (type === 'glass') {
+                    this.roughness = 0.1;
+                    this.metalness = 0.1;
+                } else if (type === 'aluminum') {
+                    this.roughness = 0.2;
+                    this.metalness = 0.9;
+                } else if (type === 'wood') {
+                    this.roughness = 0.8;
+                    this.metalness = 0.0;
+                } else if (type === 'ceramic') {
+                    this.roughness = 0.95;
+                    this.metalness = 0.0;
+                } else {
+                    // solid / estándar
+                    this.roughness = 0.4;
+                    this.metalness = 0.8;
+                }
+                
+                if (sRoughness) sRoughness.value = this.roughness;
+                if (vRoughness) vRoughness.textContent = `${(this.roughness * 100).toFixed(0)}%`;
+                if (sMetalness) sMetalness.value = this.metalness;
+                if (vMetalness) vMetalness.textContent = `${(this.metalness * 100).toFixed(0)}%`;
+                
+                this.updateMaterialType();
+            });
+        }
+
         // Evento de Carga de Archivo Local
         const fileInput = document.getElementById('file-input');
         fileInput.addEventListener('change', (e) => {
@@ -563,10 +608,12 @@ class WebARApp {
                 const intersects = this.placedModel ? this.raycaster.intersectObject(this.placedModel, true) : [];
 
                 if (timeDiff < 300 && intersects.length > 0) {
-                    // Doble toque en el modelo -> Salto de físicas
+                    // Doble toque en el modelo -> Salto e inflado de físicas elástico
                     this.isDoubleTap = true;
                     this.physics.applyImpulse(6.0); // Impulso hacia arriba (m/s)
-                    this.showToast('¡Impulso aplicado! Salto elástico.');
+                    this.inflateAmount = 0.5;       // Iniciar inflado al 50%
+                    this.inflateTimer = 0.0;        // Reiniciar oscilación
+                    this.showToast('¡Modelo inflado con rebote elástico!');
                     return;
                 }
 
@@ -971,6 +1018,7 @@ class WebARApp {
             this.updateDeformation();
             this.updateColor();
             this.updateMaterialProperties();
+            this.updateMaterialType();
 
             // Re-ejecutar física si estaba corriendo
             if (this.physics.isSimulating) {
@@ -1004,6 +1052,7 @@ class WebARApp {
         this.updateDeformation();
         this.updateColor();
         this.updateMaterialProperties();
+        this.updateMaterialType();
 
         // Iniciar rebote físico dinámico desde la altura de caída configurada
         this.physics.startDrop(position.y);
@@ -1062,6 +1111,15 @@ class WebARApp {
         }
         if (this.activeModel) {
             this.deformer.changeMaterialProperties(this.activeModel, this.roughness, this.metalness);
+        }
+    }
+
+    updateMaterialType() {
+        if (this.placedModel) {
+            this.deformer.changeMaterialType(this.placedModel, this.currentMaterialType);
+        }
+        if (this.activeModel) {
+            this.deformer.changeMaterialType(this.activeModel, this.currentMaterialType);
         }
     }
 
@@ -1455,9 +1513,27 @@ class WebARApp {
                 }
             }
 
-            // Combinar con la deformación de volumen conservado del slider/pellizco
-            const finalScaleY = this.currentDeformation * scaleY;
-            const finalScaleXZ = (1.0 / Math.sqrt(this.currentDeformation)) * scaleXZ;
+            // Físicas: Inflado elástico (deformación de volumen expansiva por doble toque)
+            let inflateScaleY = 1.0;
+            let inflateScaleXZ = 1.0;
+
+            if (this.inflateAmount > 0.0) {
+                this.inflateTimer += dt;
+                const decay = Math.exp(-4 * this.inflateTimer); // Decaimiento suave
+                const osc = Math.sin(15 * this.inflateTimer);   // Oscilación senoidal
+                const currentInflate = this.inflateAmount * decay * (1.0 + osc * 0.4);
+
+                inflateScaleY += currentInflate;
+                inflateScaleXZ += currentInflate;
+
+                if (decay < 0.01) {
+                    this.inflateAmount = 0.0;
+                }
+            }
+
+            // Combinar con la deformación de volumen conservado del slider/pellizco e inflado
+            const finalScaleY = this.currentDeformation * scaleY * inflateScaleY;
+            const finalScaleXZ = (1.0 / Math.sqrt(this.currentDeformation)) * scaleXZ * inflateScaleXZ;
 
             // Escalar el grupo colocado
             this.placedModel.scale.set(finalScaleXZ, finalScaleY, finalScaleXZ);
