@@ -151,21 +151,26 @@ class MeshDeformer {
      * @param {THREE.Object3D} model - El modelo 3D
      * @param {string} type - Tipo de material ('solid', 'aluminum', 'glass', 'wood', 'ceramic')
      */
-    changeMaterialType(model, type) {
+    changeMaterialType(model, type, customColorHex = '#8b5cf6') {
         if (!model) return;
+
+        const customColor = new THREE.Color(customColorHex);
+        const glassColor = new THREE.Color(0xffffff);      // Vidrio claro neutral
+        const aluminumColor = new THREE.Color(0xd1d5db);   // Gris aluminio plateado
+        const woodColor = new THREE.Color(0x8b5a2b);       // Marrón madera roble
+        const ceramicColor = new THREE.Color(0xf5f5f4);    // Blanco piedra/cerámica porosa
 
         model.traverse((child) => {
             if (child.isMesh && child.material) {
                 const materials = Array.isArray(child.material) ? child.material : [child.material];
                 const updatedMaterials = materials.map((oldMat) => {
-                    const prevColor = oldMat.color ? oldMat.color.clone() : new THREE.Color(0x8b5cf6);
                     const prevMap = oldMat.map;
 
                     let newMat;
                     if (type === 'glass') {
                         // Vidrio refractivo de alta calidad usando MeshPhysicalMaterial
                         newMat = new THREE.MeshPhysicalMaterial({
-                            color: prevColor,
+                            color: glassColor,
                             roughness: 0.1,
                             metalness: 0.1,
                             transmission: 0.9,     // Habilitar refracción
@@ -177,21 +182,21 @@ class MeshDeformer {
                         });
                     } else if (type === 'aluminum') {
                         newMat = new THREE.MeshStandardMaterial({
-                            color: prevColor,
+                            color: aluminumColor,
                             roughness: 0.2,
                             metalness: 0.9,
                             shadowSide: THREE.DoubleSide
                         });
                     } else if (type === 'wood') {
                         newMat = new THREE.MeshStandardMaterial({
-                            color: prevColor,
+                            color: woodColor,
                             roughness: 0.8,
                             metalness: 0.0,
                             shadowSide: THREE.DoubleSide
                         });
                     } else if (type === 'ceramic') {
                         newMat = new THREE.MeshStandardMaterial({
-                            color: prevColor,
+                            color: ceramicColor,
                             roughness: 0.95,
                             metalness: 0.0,
                             shadowSide: THREE.DoubleSide
@@ -199,7 +204,7 @@ class MeshDeformer {
                     } else {
                         // solid / estándar
                         newMat = new THREE.MeshStandardMaterial({
-                            color: prevColor,
+                            color: customColor,
                             roughness: 0.4,
                             metalness: 0.8,
                             shadowSide: THREE.DoubleSide

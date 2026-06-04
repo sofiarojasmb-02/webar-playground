@@ -616,42 +616,6 @@ class WebARApp {
                     this.showToast('¡Modelo inflado con rebote elástico!');
                     return;
                 }
-
-                // Si es un toque ordinario sobre el modelo, iniciar ARRASTRE (Drag & Drop)
-                if (intersects.length > 0) {
-                    // Esperar unos milisegundos para asegurar que no es doble toque antes de arrastrar
-                    setTimeout(() => {
-                        if (this.isDoubleTap || !this.activePointers[e.pointerId]) return;
-                        
-                        const intersectPoint = intersects[0].point;
-                        if (!intersectPoint || isNaN(intersectPoint.x) || isNaN(intersectPoint.y) || isNaN(intersectPoint.z)) return;
-
-                        this.isDragging = true;
-                        this.controls.enabled = false; // Desactivar controles de cámara
-                        this.physics.stop(); // Pausar físicas durante el arrastre
-
-                        // Configurar el plano de arrastre horizontal y vertical orientado hacia la cámara
-                        const camDir = new THREE.Vector3();
-                        camera.getWorldDirection(camDir);
-                        if (isNaN(camDir.x) || isNaN(camDir.y) || isNaN(camDir.z)) {
-                            camDir.set(0, 0, -1);
-                        }
-                        this.dragPlane.setFromNormalAndCoplanarPoint(camDir.negate(), intersectPoint);
-                        
-                        // Guardar la compensación entre el centro del modelo y el punto tocado
-                        if (!isNaN(this.placedModel.position.x) && !isNaN(this.placedModel.position.y) && !isNaN(this.placedModel.position.z)) {
-                            this.dragOffset.copy(this.placedModel.position).sub(intersectPoint);
-                        } else {
-                            this.dragOffset.set(0, 0, 0);
-                        }
-
-                        // Auto-colapsar el panel para dejar ver la escena
-                        const drawer = document.getElementById('control-drawer');
-                        if (drawer && !drawer.classList.contains('collapsed')) {
-                            drawer.classList.add('collapsed');
-                        }
-                    }, 50);
-                }
             }
         });
 
@@ -692,24 +656,7 @@ class WebARApp {
                 return;
             }
 
-            // 2. Mover durante ARRASTRE
-            if (this.isDragging && this.placedModel && pointerIds.length === 1) {
-                this.updateMouseCoords(e);
-                const camera = this.xrSession ? this.renderer.xr.getCamera() : this.camera;
-                this.raycaster.setFromCamera(this.mouse, camera);
-                
-                const intersection = new THREE.Vector3();
-                const result = this.raycaster.ray.intersectPlane(this.dragPlane, intersection);
-                
-                if (result && !isNaN(intersection.x) && !isNaN(intersection.y) && !isNaN(intersection.z)) {
-                    // Mover el modelo
-                    this.placedModel.position.copy(intersection).add(this.dragOffset);
-                    
-                    // Limitar al suelo
-                    const floorY = isNaN(this.physics.groundY) ? 0.0 : this.physics.groundY;
-                    this.placedModel.position.y = Math.max(floorY, this.placedModel.position.y);
-                }
-            }
+            // Código de movimiento de arrastre eliminado.
         });
 
         const onPointerUp = (e) => {
@@ -726,21 +673,7 @@ class WebARApp {
                 }
             }
 
-            if (this.isDragging) {
-                this.isDragging = false;
-                if (!this.videoArActive || !this.gyroActive) {
-                    this.controls.enabled = true; // Rehabilitar cámara
-                }
-                
-                // Soltar objeto: reiniciar caída libre de físicas desde la altura actual
-                if (this.placedModel) {
-                    this.physics.positionY = this.placedModel.position.y;
-                    this.physics.velocityY = 0.0;
-                    this.physics.isSimulating = true;
-                    this.showToast('Objeto soltado.');
-                }
-                return;
-            }
+            // Código de finalización de arrastre eliminado.
 
             // Si es un click rápido en el lienzo, no es arrastre ni doble toque
             if (clickDuration < 250 && !this.isDoubleTap) {
@@ -1093,12 +1026,14 @@ class WebARApp {
      * Actualiza color de material
      */
     updateColor() {
-        if (this.placedModel) {
-            this.deformer.changeColor(this.placedModel, this.currentColor);
-        }
-        // También actualizar el color en la plantilla activa para futuras colocaciones
-        if (this.activeModel) {
-            this.deformer.changeColor(this.activeModel, this.currentColor);
+        if (this.currentMaterialType === 'solid') {
+            if (this.placedModel) {
+                this.deformer.changeColor(this.placedModel, this.currentColor);
+            }
+            // También actualizar el color en la plantilla activa para futuras colocaciones
+            if (this.activeModel) {
+                this.deformer.changeColor(this.activeModel, this.currentColor);
+            }
         }
     }
 
@@ -1116,10 +1051,10 @@ class WebARApp {
 
     updateMaterialType() {
         if (this.placedModel) {
-            this.deformer.changeMaterialType(this.placedModel, this.currentMaterialType);
+            this.deformer.changeMaterialType(this.placedModel, this.currentMaterialType, this.currentColor);
         }
         if (this.activeModel) {
-            this.deformer.changeMaterialType(this.activeModel, this.currentMaterialType);
+            this.deformer.changeMaterialType(this.activeModel, this.currentMaterialType, this.currentColor);
         }
     }
 
@@ -1362,29 +1297,59 @@ class WebARApp {
             dt = 0.016; // Fallback estable a ~60fps si hay saltos de frames en el renderizado
         }
 
-        // 1. Actualizar controles de cámara orbital (solo en simulador)
+        // 1. Actualizar controles de cámara orbital o giroscopio (según el modo)
         if (!this.xrSession) {
-            this.controls.update();
-            
-            // Raycasting de la retícula en modo simulador (siguiendo al cursor del ratón sobre la rejilla)
-            this.raycaster.setFromCamera(this.mouse, this.camera);
-            const intersects = this.raycaster.intersectObject(this.shadowPlane);
-
-            if (intersects.length > 0) {
-                const point = intersects[0].point;
-                this.reticle.visible = true;
+            if (this.videoArActive) {
+                // Modo Video AR (iOS Safari fallback): Proyectar retícula en el centro, sobre un suelo virtual a 1.2m bajo la cámara
+                const camPos = new THREE.Vector3();
+                this.camera.getWorldPosition(camPos);
                 
-                // Actualizar matriz de la retícula
+                const camDir = new THREE.Vector3();
+                this.camera.getWorldDirection(camDir);
+                
+                // Aplanar la dirección horizontalmente
+                camDir.y = 0;
+                if (camDir.lengthSq() < 1e-6) {
+                    camDir.set(0, 0, -1);
+                }
+                camDir.normalize();
+                
+                // Colocar la retícula a 1.5 metros delante, y 1.2 metros abajo de la cámara
+                const point = camPos.clone().add(camDir.multiplyScalar(1.5));
+                point.y = camPos.y - 1.2;
+                
+                this.reticle.visible = true;
                 const matrix = new THREE.Matrix4().makeTranslation(point.x, point.y, point.z);
                 this.reticle.matrix.copy(matrix);
-
-                // Guardar la última posición válida en simulador
+                
                 if (!this.lastValidReticlePosition) {
                     this.lastValidReticlePosition = new THREE.Vector3();
                 }
                 this.lastValidReticlePosition.copy(point);
             } else {
-                this.reticle.visible = false;
+                // Modo Simulador de escritorio estándar
+                this.controls.update();
+                
+                // Raycasting de la retícula en modo simulador (siguiendo al cursor del ratón sobre la rejilla)
+                this.raycaster.setFromCamera(this.mouse, this.camera);
+                const intersects = this.raycaster.intersectObject(this.shadowPlane);
+
+                if (intersects.length > 0) {
+                    const point = intersects[0].point;
+                    this.reticle.visible = true;
+                    
+                    // Actualizar matriz de la retícula
+                    const matrix = new THREE.Matrix4().makeTranslation(point.x, point.y, point.z);
+                    this.reticle.matrix.copy(matrix);
+
+                    // Guardar la última posición válida en simulador
+                    if (!this.lastValidReticlePosition) {
+                        this.lastValidReticlePosition = new THREE.Vector3();
+                    }
+                    this.lastValidReticlePosition.copy(point);
+                } else {
+                    this.reticle.visible = false;
+                }
             }
         } else {
             // Modo WebXR AR Activo: Ejecutar Hit Test
