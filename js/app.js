@@ -640,7 +640,6 @@ class WebARApp {
                     }
                 }
             }
-            }
         });
 
         dom.addEventListener('pointermove', (e) => {
