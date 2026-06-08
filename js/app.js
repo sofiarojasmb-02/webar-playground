@@ -351,6 +351,22 @@ class WebARApp {
             this.physics.dropHeight = val;
         });
 
+        const sliderMass = document.getElementById('slider-mass');
+        const valMass = document.getElementById('val-mass');
+        sliderMass.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            valMass.textContent = `${val.toFixed(1)} kg`;
+            this.physics.mass = val;
+        });
+
+        const sliderFriction = document.getElementById('slider-friction');
+        const valFriction = document.getElementById('val-friction');
+        sliderFriction.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            valFriction.textContent = val.toFixed(1);
+            this.physics.friction = val;
+        });
+
         const btnDrop = document.getElementById('btn-drop');
         btnDrop.addEventListener('click', () => {
             this.triggerBounceDrop();
@@ -1004,15 +1020,29 @@ class WebARApp {
      * Dispara de nuevo el lanzamiento/caída física
      */
     triggerBounceDrop() {
+        // Si no está colocado el modelo, pero hay una retícula válida, lo colocamos ahí primero
         if (!this.placedModel) {
-            this.showToast('Coloca un modelo en la escena primero haciendo clic en el suelo.', 'warning');
-            return;
+            if (this.lastValidReticlePosition) {
+                this.placeModel(this.lastValidReticlePosition);
+                this.showToast('Objeto colocado y físicas ejecutadas.');
+                return;
+            } else {
+                this.showToast('Apunta a una superficie para detectar el suelo antes de ejecutar físicas.', 'warning');
+                return;
+            }
         }
 
-        // Reiniciar físicas en la posición actual en X, Z y suelo base
-        const floorY = this.physics.groundY;
+        // Si ya está colocado, podemos moverlo a la posición actual de la retícula (entorno real detectado por AR Hit Test)
+        const floorY = this.lastValidReticlePosition ? this.lastValidReticlePosition.y : this.physics.groundY;
+        
+        // Si la retícula está activa/visible, actualizamos la posición horizontal del modelo
+        if (this.lastValidReticlePosition && this.reticle && this.reticle.visible) {
+            this.placedModel.position.x = this.lastValidReticlePosition.x;
+            this.placedModel.position.z = this.lastValidReticlePosition.z;
+        }
+
         this.physics.startDrop(floorY);
-        this.showToast('Objeto lanzado.');
+        this.showToast('Físicas ejecutadas.');
     }
 
     /**

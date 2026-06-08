@@ -9,6 +9,8 @@ class PhysicsEngine {
         this.elasticity = 0.6;     // Coeficiente de restitución (0 = sin rebote, 1 = rebote perfecto)
         this.dropHeight = 1.2;     // Altura inicial del lanzamiento (metros sobre el suelo)
         this.groundY = 0.0;        // Coordenada Y del suelo detectado (se actualiza dinámicamente)
+        this.mass = 1.0;           // Masa del objeto en kg (0.1 a 10.0)
+        this.friction = 0.1;       // Fricción / Resistencia del aire (0.0 a 4.0)
         
         this.positionY = 0.0;      // Posición actual en Y
         this.velocityY = 0.0;      // Velocidad actual en Y
@@ -60,7 +62,7 @@ class PhysicsEngine {
         if (isNaN(dt) || dt <= 0) return;
 
         // Validar propiedades físicas críticas contra NaN
-        if (isNaN(this.gravity) || isNaN(this.elasticity) || isNaN(this.groundY)) {
+        if (isNaN(this.gravity) || isNaN(this.elasticity) || isNaN(this.groundY) || isNaN(this.mass) || isNaN(this.friction)) {
             console.warn("Propiedades del motor de físicas contienen NaN. Deteniendo simulación.");
             this.stop();
             return;
@@ -71,9 +73,13 @@ class PhysicsEngine {
         const actualDt = Math.min(dt, maxDt);
         if (isNaN(actualDt) || actualDt <= 0) return;
 
-        // Integración de Euler
-        // v = v + a * dt (gravedad hacia abajo, por tanto restamos)
-        this.velocityY -= this.gravity * actualDt;
+        // Integración de Euler con masa y fricción (resistencia del aire)
+        // Fuerza de arrastre (drag) = friction * velocityY
+        // Aceleración de arrastre = (friction * velocityY) / mass
+        // Aceleración total = -gravity - dragAcceleration
+        const dragAcceleration = (this.friction * this.velocityY) / Math.max(0.01, this.mass);
+        this.velocityY -= (this.gravity + dragAcceleration) * actualDt;
+        
         // y = y + v * dt
         this.positionY += this.velocityY * actualDt;
 
