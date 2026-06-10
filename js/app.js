@@ -1436,14 +1436,8 @@ class WebARApp {
             }
         }
 
-        // Si ya está colocado, podemos moverlo a la posición actual de la retícula (entorno real detectado por AR Hit Test)
-        const floorY = this.lastValidReticlePosition ? this.lastValidReticlePosition.y : this.physics.groundY;
-        
-        // Si la retícula está activa/visible, actualizamos la posición horizontal del modelo
-        if (this.lastValidReticlePosition && this.reticle && this.reticle.visible) {
-            this.placedModel.position.x = this.lastValidReticlePosition.x;
-            this.placedModel.position.z = this.lastValidReticlePosition.z;
-        }
+        // Usar la Y del suelo donde está colocado el modelo, sin moverlo de posición
+        const floorY = this.placedModel.position.y;
 
         this.physics.startDrop(floorY);
         this.showToast('Físicas ejecutadas.');
