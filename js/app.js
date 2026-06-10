@@ -88,6 +88,20 @@ class WebARApp {
         this.inflateAmount = 0.0;
         this.inflateTimer = 0.0;
         this.currentMaterialType = 'solid';
+
+        // Objetos de apoyo visual para los 12 principios de animación
+        this.stagingLight = null;
+        this.rippleMesh = null;
+        this.particleSystem = null;
+        this.ghostMeshes = [];
+        this.boxHelper = null;
+        this.vectorArrow = null;
+        this.dimensionLabels = null;
+        this.lastPosition = new THREE.Vector3();
+        this.horizontalVelocity = new THREE.Vector3();
+        this.cameraShakeTime = 0.0;
+        this.cameraShakeIntensity = 0.0;
+        this.appealSpinTime = 0.0;
     }
 
     /**
@@ -101,12 +115,39 @@ class WebARApp {
         this.setupUIEvents();
         this.setupWebXRAvailability();
         this.loadRecentGallery();
+        
+        // Inicializar auxiliares visuales de los 12 principios
+        this.setupAnimationPrinciplesHelpers();
 
-        // Configurar colisión en físicas para squash elástico (efecto gelatina)
+        // Configurar colisión en físicas para squash elástico (efecto gelatina) y efectos secundarios
         this.physics.onCollision = (impactVelocity) => {
             if (!isNaN(impactVelocity) && isFinite(impactVelocity)) {
-                this.squashAmount = Math.min(0.5, impactVelocity * 0.05); // Aplastar hasta un 50% max
-                this.squashTimer = 0.0;
+                // 1. Squash & Stretch: amortiguar escala
+                if (this.physics.principles.squashStretch) {
+                    this.squashAmount = Math.min(0.6, impactVelocity * 0.06) * this.physics.exaggeration;
+                    this.squashTimer = 0.0;
+                }
+                
+                // 3. Staging: Sacudida de cámara
+                if (this.physics.principles.staging && impactVelocity > 1.5) {
+                    this.cameraShakeIntensity = Math.min(0.12, impactVelocity * 0.015) * this.physics.exaggeration;
+                    this.cameraShakeTime = 0.22;
+                }
+                
+                // 8. Secondary Action: Partículas y onda expansiva
+                if (this.physics.principles.secondaryAction && this.placedModel) {
+                    this.triggerSecondaryActionEffects(this.placedModel.position.clone(), impactVelocity);
+                }
+            }
+        };
+
+        // Configurar inicio de salto para Poses Fantasma
+        this.physics.onJumpStart = () => {
+            if (this.physics.motionMode === 'pose' && this.physics.principles.poseGhosts && this.placedModel) {
+                this.spawnGhostMeshes();
+            }
+            if (this.physics.principles.appeal) {
+                this.appealSpinTime = 0.45; // Giro sutil al despegar
             }
         };
 
@@ -559,6 +600,146 @@ class WebARApp {
             });
         });
 
+        // --- BINDINGS PARA 12 PRINCIPIOS DE ANIMACIÓN ---
+        // 1. Selector de Pestañas (Tabs)
+        const tabStandard = document.getElementById('tab-btn-standard');
+        const tabPrinciples = document.getElementById('tab-btn-principles');
+        const panelStandard = document.getElementById('panel-standard');
+        const panelPrinciples = document.getElementById('panel-principles');
+
+        if (tabStandard && tabPrinciples && panelStandard && panelPrinciples) {
+            tabStandard.addEventListener('click', (e) => {
+                e.stopPropagation();
+                tabStandard.classList.add('active');
+                tabPrinciples.classList.remove('active');
+                panelStandard.classList.add('active');
+                panelStandard.style.display = 'block';
+                panelPrinciples.classList.remove('active');
+                panelPrinciples.style.display = 'none';
+            });
+
+            tabPrinciples.addEventListener('click', (e) => {
+                e.stopPropagation();
+                tabPrinciples.classList.add('active');
+                tabStandard.classList.remove('active');
+                panelPrinciples.classList.add('active');
+                panelPrinciples.style.display = 'block';
+                panelStandard.classList.remove('active');
+                panelStandard.style.display = 'none';
+            });
+        }
+
+        // 2. Control de Exageración
+        const sliderExaggeration = document.getElementById('slider-exaggeration');
+        const valExaggeration = document.getElementById('val-exaggeration');
+        if (sliderExaggeration) {
+            sliderExaggeration.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                if (valExaggeration) {
+                    valExaggeration.textContent = `${val.toFixed(1)}x ${val === 1.0 ? '(Normal)' : val > 1.0 ? '(Exagerado)' : '(Sutil)'}`;
+                }
+                this.physics.exaggeration = val;
+            });
+        }
+
+        // 3. Preset de Timing (Ritmo)
+        const selectTimingPreset = document.getElementById('select-timing-preset');
+        if (selectTimingPreset) {
+            selectTimingPreset.addEventListener('change', (e) => {
+                const preset = e.target.value;
+                this.physics.applyTimingPreset(preset);
+
+                // Sincronizar sliders originales
+                const sGravity = document.getElementById('slider-gravity');
+                const vGravity = document.getElementById('val-gravity');
+                const sElasticity = document.getElementById('slider-elasticity');
+                const vElasticity = document.getElementById('val-elasticity');
+                const sFriction = document.getElementById('slider-friction');
+                const vFriction = document.getElementById('val-friction');
+                const sMass = document.getElementById('slider-mass');
+                const vMass = document.getElementById('val-mass');
+
+                if (sGravity) {
+                    sGravity.value = this.physics.gravity;
+                    if (vGravity) vGravity.textContent = `${this.physics.gravity.toFixed(1)} m/s²`;
+                }
+                if (sElasticity) {
+                    sElasticity.value = this.physics.elasticity;
+                    if (vElasticity) vElasticity.textContent = `${(this.physics.elasticity * 100).toFixed(0)}%`;
+                }
+                if (sFriction) {
+                    sFriction.value = this.physics.friction;
+                    if (vFriction) vFriction.textContent = this.physics.friction.toFixed(1);
+                }
+                if (sMass) {
+                    sMass.value = this.physics.mass;
+                    if (vMass) vMass.textContent = `${this.physics.mass.toFixed(1)} kg`;
+                }
+
+                this.showToast(`Timing preset '${preset}' aplicado.`);
+            });
+        }
+
+        // 4. Modo de Movimiento (Acción Directa vs Pose a Pose)
+        const selectMotionMode = document.getElementById('select-motion-mode');
+        if (selectMotionMode) {
+            selectMotionMode.addEventListener('change', (e) => {
+                this.physics.motionMode = e.target.value;
+                if (e.target.value === 'pose') {
+                    this.showToast('Modo Pose a Pose activo.');
+                } else {
+                    this.showToast('Modo Acción Directa activo.');
+                    this.clearGhostMeshes();
+                }
+            });
+        }
+
+        // 5. Botón Animar
+        const btnAnimateTrigger = document.getElementById('btn-animate-trigger');
+        if (btnAnimateTrigger) {
+            btnAnimateTrigger.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.triggerAnimatedJump();
+            });
+        }
+
+        // 6. Interruptores de Principios individuales
+        const principlesMapping = [
+            { id: 'check-squash-stretch', prop: 'squashStretch' },
+            { id: 'check-anticipation', prop: 'anticipation' },
+            { id: 'check-staging', prop: 'staging' },
+            { id: 'check-pose-ghosts', prop: 'poseGhosts' },
+            { id: 'check-follow-through', prop: 'followThrough' },
+            { id: 'check-slow-in-out', prop: 'slowInOut' },
+            { id: 'check-arcs', prop: 'arcs' },
+            { id: 'check-secondary-action', prop: 'secondaryAction' },
+            { id: 'check-timing', prop: 'timing' },
+            { id: 'check-exaggeration', prop: 'exaggeration' },
+            { id: 'check-solid-drawing', prop: 'solidDrawing' },
+            { id: 'check-appeal', prop: 'appeal' }
+        ];
+
+        principlesMapping.forEach((item) => {
+            const chk = document.getElementById(item.id);
+            if (chk) {
+                // Sincronizar estado inicial
+                chk.checked = this.physics.principles[item.prop];
+                chk.addEventListener('change', (e) => {
+                    this.physics.principles[item.prop] = e.target.checked;
+                    
+                    // Efectos inmediatos al desactivar
+                    if (item.prop === 'solidDrawing' && !e.target.checked) {
+                        if (this.boxHelper) this.boxHelper.visible = false;
+                        if (this.vectorArrow) this.vectorArrow.visible = false;
+                        if (this.dimensionLabels) this.dimensionLabels.style.opacity = '0';
+                    }
+                    if (item.prop === 'poseGhosts' && !e.target.checked) {
+                        this.clearGhostMeshes();
+                    }
+                });
+            }
+        });
+
         // Inicializar interacciones multitáctiles de físicas y gestos
         this.setupTouchInteractions();
     }
@@ -774,6 +955,229 @@ class WebARApp {
         } catch (error) {
             console.error('Error al poblar galería desde DB:', error);
         }
+    }
+
+    /**
+     * Inicializa los objetos auxiliares en Three.js para visualizar los 12 principios
+     */
+    setupAnimationPrinciplesHelpers() {
+        // 1. Luz de escenario (Staging - spotlight)
+        this.stagingLight = new THREE.SpotLight(0x06b6d4, 0.0, 10, Math.PI / 5, 0.6, 1);
+        this.stagingLight.castShadow = true;
+        this.stagingLight.shadow.mapSize.width = 512;
+        this.stagingLight.shadow.mapSize.height = 512;
+        this.scene.add(this.stagingLight);
+        this.scene.add(this.stagingLight.target);
+
+        // 2. Anillo de onda de choque (Secondary Action - Grid ripple)
+        const rippleGeo = new THREE.RingGeometry(0.01, 0.45, 32);
+        rippleGeo.rotateX(-Math.PI / 2);
+        const rippleMat = new THREE.MeshBasicMaterial({
+            color: 0x06b6d4,
+            transparent: true,
+            opacity: 0.0,
+            side: THREE.DoubleSide,
+            depthWrite: false
+        });
+        this.rippleMesh = new THREE.Mesh(rippleGeo, rippleMat);
+        this.rippleMesh.visible = false;
+        this.scene.add(this.rippleMesh);
+
+        // 3. Sistema de partículas por colisión (Secondary Action)
+        const particleCount = 40;
+        const positions = new Float32Array(particleCount * 3);
+        const velocities = [];
+
+        for (let i = 0; i < particleCount; i++) {
+            positions[i*3] = 0;
+            positions[i*3+1] = 0;
+            positions[i*3+2] = 0;
+            velocities.push(new THREE.Vector3());
+        }
+
+        const particleGeo = new THREE.BufferGeometry();
+        particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        const particleMat = new THREE.PointsMaterial({
+            color: 0x8b5cf6,
+            size: 0.045,
+            transparent: true,
+            opacity: 0.0,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+        
+        this.particleSystem = new THREE.Points(particleGeo, particleMat);
+        this.particleSystem.userData = { velocities, activeLife: 0.0 };
+        this.particleSystem.visible = false;
+        this.scene.add(this.particleSystem);
+
+        // 4. Elemento DOM para etiquetas de Dibujo Sólido (Solid Drawing)
+        this.dimensionLabels = document.createElement('div');
+        this.dimensionLabels.className = 'solid-dimension-label';
+        this.dimensionLabels.style.opacity = '0';
+        document.body.appendChild(this.dimensionLabels);
+    }
+
+    /**
+     * Dispara los efectos visuales secundarios al colisionar con el suelo.
+     */
+    triggerSecondaryActionEffects(impactPos, velocity) {
+        if (!this.rippleMesh || !this.particleSystem) return;
+
+        const mult = this.physics.exaggeration;
+        const strength = Math.min(1.0, velocity * 0.15);
+
+        // 1. Posicionar y activar onda de choque (ripple)
+        this.rippleMesh.position.copy(impactPos);
+        this.rippleMesh.position.y += 0.005; // evitar z-fighting
+        this.rippleMesh.scale.setScalar(0.01);
+        this.rippleMesh.material.color.setHex(this.currentColor === '#06b6d4' ? 0x8b5cf6 : 0x06b6d4);
+        this.rippleMesh.material.opacity = 0.85 * strength;
+        this.rippleMesh.visible = true;
+
+        // 2. Posicionar y activar partículas
+        this.particleSystem.position.copy(impactPos);
+        this.particleSystem.position.y += 0.01;
+        this.particleSystem.material.color.set(this.currentColor);
+        this.particleSystem.material.opacity = 1.0;
+        this.particleSystem.visible = true;
+        this.particleSystem.userData.activeLife = 1.0; // segundos de vida
+
+        const posAttr = this.particleSystem.geometry.attributes.position;
+        const count = posAttr.count;
+        const vels = this.particleSystem.userData.velocities;
+
+        for (let i = 0; i < count; i++) {
+            // Empezar en el centro del impacto
+            posAttr.setXYZ(i, 0, 0, 0);
+
+            // Dirección radial 360 grados y hacia arriba
+            const angle = Math.random() * Math.PI * 2;
+            const hSpeed = (0.3 + Math.random() * 1.2) * strength * mult;
+            const vSpeed = (0.5 + Math.random() * 2.2) * strength * mult;
+            vels[i].set(
+                Math.cos(angle) * hSpeed,
+                vSpeed,
+                Math.sin(angle) * hSpeed
+            );
+        }
+        posAttr.needsUpdate = true;
+        
+        // 3. Efecto de Appeal (personalidad) en el impacto (pequeño giro o guiño de escala)
+        if (this.physics.principles.appeal) {
+            this.appealSpinTime = 0.25; // Pequeño shimmy
+        }
+    }
+
+    /**
+     * Genera las poses fantasma (Pose to Pose) a lo largo del arco proyectado.
+     */
+    spawnGhostMeshes() {
+        this.clearGhostMeshes();
+        if (!this.placedModel) return;
+
+        const startX = this.placedModel.position.x;
+        const startZ = this.placedModel.position.z;
+        const floorY = this.physics.groundY;
+        const velY = 6.0; // Velocidad Y de salto estándar
+        const g = this.physics.gravity;
+
+        // Tiempo total de vuelo hasta tocar el suelo: Y(t) = v0*t - 0.5*g*t^2 = 0 => t = 2 * v0 / g
+        const flightTime = (2 * velY) / g;
+        if (flightTime <= 0 || isNaN(flightTime)) return;
+
+        // Crear 3 fantasmas a lo largo del trayecto: 25%, 50% (ápice), 75%
+        const steps = [0.25, 0.5, 0.75];
+
+        steps.forEach((ratio) => {
+            const ghost = this.placedModel.clone();
+            
+            // Reemplazar material por una malla de alambre semitransparente
+            ghost.traverse((child) => {
+                if (child.isMesh) {
+                    child.material = new THREE.MeshBasicMaterial({
+                        color: this.currentColor,
+                        wireframe: true,
+                        transparent: true,
+                        opacity: 0.16 * this.physics.exaggeration
+                    });
+                }
+            });
+
+            // Calcular posición en el tiempo correspondiente
+            const t = flightTime * ratio;
+            const px = startX + this.physics.velocityX * t;
+            const pz = startZ + this.physics.velocityZ * t;
+            const py = floorY + (velY * t - 0.5 * g * t * t);
+
+            ghost.position.set(px, py, pz);
+
+            // Calcular deformación por estiramiento vertical en ese punto de la curva
+            let scaleY = 1.0;
+            if (this.physics.principles.squashStretch && ratio !== 0.5) {
+                const instantVelY = velY - g * t;
+                const velFactor = Math.min(0.22, Math.abs(instantVelY) * 0.015) * this.physics.exaggeration;
+                scaleY += velFactor;
+            }
+            const scaleXZ = 1.0 / Math.sqrt(scaleY);
+            ghost.scale.set(scaleXZ, scaleY, scaleXZ);
+
+            this.scene.add(ghost);
+            this.ghostMeshes.push(ghost);
+        });
+    }
+
+    /**
+     * Limpia todas las poses fantasma del escenario.
+     */
+    clearGhostMeshes() {
+        this.ghostMeshes.forEach((ghost) => {
+            this.scene.remove(ghost);
+        });
+        this.ghostMeshes = [];
+    }
+
+    /**
+     * Lanza un salto dinámico aplicando arcos, anticipación y ritmo.
+     */
+    triggerAnimatedJump() {
+        if (!this.placedModel) {
+            this.showToast('Apunta y coloca el modelo en la superficie antes de animar.', 'warning');
+            return;
+        }
+
+        if (this.physics.isSimulating || this.physics.isAnticipating) {
+            return; // Ya está animándose
+        }
+
+        const startX = this.placedModel.position.x;
+        const startZ = this.placedModel.position.z;
+        const floorY = this.physics.groundY;
+
+        let velX = 0;
+        let velZ = 0;
+        const jumpVelY = 6.0;
+
+        // Principio: Arcos (Salto parabólico tridimensional)
+        if (this.physics.principles.arcs) {
+            // Ángulo aleatorio y distancia horizontal
+            const angle = Math.random() * Math.PI * 2;
+            const distance = (0.7 + Math.random() * 0.8); // 0.7 a 1.5 metros
+            
+            // Vuelo aproximado: t = 2 * v0y / g
+            const flightTime = (2 * jumpVelY) / this.physics.gravity;
+            const speed = distance / flightTime;
+            
+            velX = Math.cos(angle) * speed;
+            velZ = Math.sin(angle) * speed;
+            
+            this.showToast('¡Despegando salto en arco (parábola)!');
+        } else {
+            this.showToast('¡Lanzando salto vertical!');
+        }
+
+        // Ejecutar impulso en Y
+        this.physics.applyImpulse(jumpVelY, velX, velZ);
     }
 
     /**
@@ -1464,46 +1868,169 @@ class WebARApp {
         // La altura del suelo (groundY) se establece al colocar/arrastrar el modelo, y se mantiene fija
         // para evitar que el modelo flote o se hunda cuando la cámara apunta hacia otras superficies en AR.
 
-        // 2. Actualizar simulación de físicas
-        if (this.physics.isSimulating && this.placedModel) {
+        // 2. Actualizar simulación de físicas e inercia tridimensional
+        if ((this.physics.isSimulating || this.physics.isAnticipating) && this.placedModel) {
             this.physics.update(dt, 
-                (newY) => {
-                    // Actualizar posición Y del modelo
-                    this.placedModel.position.y = newY;
+                (newY, newX, newZ) => {
+                    this.placedModel.position.set(newX, newY, newZ);
                 },
                 () => {
-                    // El modelo se ha asentado
                     this.showToast('Objeto en reposo.');
+                    this.clearGhostMeshes();
                 }
             );
         }
 
-        // 3. Aplicar Squash & Stretch visual (Animación física elástica) y Deformación
+        // 3. Puesta en Escena (Staging): Luz de realce que sigue al modelo
+        if (this.placedModel && this.physics.principles.staging && this.stagingLight) {
+            this.stagingLight.position.set(this.placedModel.position.x, this.placedModel.position.y + 2.5, this.placedModel.position.z);
+            this.stagingLight.target.position.copy(this.placedModel.position);
+            
+            if (this.physics.isSimulating || this.physics.isAnticipating) {
+                this.stagingLight.intensity = THREE.MathUtils.lerp(this.stagingLight.intensity, 6.0, 0.1);
+            } else {
+                this.stagingLight.intensity = THREE.MathUtils.lerp(this.stagingLight.intensity, 0.0, 0.1);
+            }
+        } else if (this.stagingLight) {
+            this.stagingLight.intensity = 0.0;
+        }
+
+        // 4. Acción Secundaria (Secondary Action): Ondas expansivas y partículas en colisión
+        if (this.rippleMesh && this.rippleMesh.visible) {
+            this.rippleMesh.scale.addScalar(dt * 3.2 * this.physics.exaggeration);
+            this.rippleMesh.material.opacity -= dt * 2.2;
+            if (this.rippleMesh.material.opacity <= 0) {
+                this.rippleMesh.visible = false;
+            }
+        }
+
+        if (this.particleSystem && this.particleSystem.visible) {
+            this.particleSystem.userData.activeLife -= dt * 1.6;
+            if (this.particleSystem.userData.activeLife <= 0) {
+                this.particleSystem.visible = false;
+            } else {
+                this.particleSystem.material.opacity = this.particleSystem.userData.activeLife;
+                const posAttr = this.particleSystem.geometry.attributes.position;
+                const count = posAttr.count;
+                const vels = this.particleSystem.userData.velocities;
+                
+                for (let i = 0; i < count; i++) {
+                    const px = posAttr.getX(i) + vels[i].x * dt;
+                    const py = posAttr.getY(i) + vels[i].y * dt;
+                    const pz = posAttr.getZ(i) + vels[i].z * dt;
+                    posAttr.setXYZ(i, px, py, pz);
+                    
+                    // Aplicar gravedad en partículas
+                    vels[i].y -= 9.8 * dt;
+                }
+                posAttr.needsUpdate = true;
+            }
+        }
+
+        // 5. Dibujo Sólido (Solid Drawing): Límites de caja, vectores y etiquetas DOM flotantes
+        if (this.placedModel && this.physics.principles.solidDrawing) {
+            // A. Jaula de alambre
+            if (!this.boxHelper) {
+                this.boxHelper = new THREE.BoxHelper(this.placedModel, 0x06b6d4);
+                this.scene.add(this.boxHelper);
+            }
+            this.boxHelper.setFromObject(this.placedModel);
+            this.boxHelper.visible = true;
+
+            // B. Vector de gravedad / balance
+            if (!this.vectorArrow) {
+                const dir = new THREE.Vector3(0, -1, 0);
+                const origin = new THREE.Vector3(0, 0, 0);
+                this.vectorArrow = new THREE.ArrowHelper(dir, origin, 0.5, 0xef4444, 0.1, 0.05);
+                this.scene.add(this.vectorArrow);
+            }
+            const box = new THREE.Box3().setFromObject(this.placedModel);
+            const center = new THREE.Vector3();
+            box.getCenter(center);
+            this.vectorArrow.position.copy(center);
+            
+            const arrowLength = (this.physics.gravity * this.physics.mass) * 0.03 * this.physics.exaggeration;
+            this.vectorArrow.setLength(Math.max(0.1, arrowLength), 0.08, 0.04);
+            this.vectorArrow.visible = true;
+
+            // C. Cartel informativo flotante en coordenadas de pantalla 2D
+            if (this.dimensionLabels) {
+                const topCenter = new THREE.Vector3((box.min.x + box.max.x)/2, box.max.y + 0.12, (box.min.z + box.max.z)/2);
+                topCenter.project(this.camera);
+                
+                const labelX = (topCenter.x * 0.5 + 0.5) * window.innerWidth;
+                const labelY = (-(topCenter.y * 0.5) + 0.5) * window.innerHeight;
+                
+                this.dimensionLabels.style.left = `${labelX}px`;
+                this.dimensionLabels.style.top = `${labelY}px`;
+                this.dimensionLabels.style.opacity = '1';
+                
+                const w = (box.max.x - box.min.x).toFixed(2);
+                const h = (box.max.y - box.min.y).toFixed(2);
+                const volDiff = ((this.placedModel.scale.y * this.placedModel.scale.x * this.placedModel.scale.z - 1.0) * 100).toFixed(0);
+                
+                this.dimensionLabels.innerHTML = `
+                    Alto: ${h}m | Ancho: ${w}m<br>
+                    Volumen: ${volDiff >= 0 ? '+' : ''}${volDiff}%
+                `;
+            }
+        } else {
+            if (this.boxHelper) this.boxHelper.visible = false;
+            if (this.vectorArrow) this.vectorArrow.visible = false;
+            if (this.dimensionLabels) this.dimensionLabels.style.opacity = '0';
+        }
+
+        // 6. Atractivo y Personalidad (Appeal / Idle Breathing)
+        let appealScaleY = 1.0;
+        let appealScaleXZ = 1.0;
+
+        if (this.placedModel) {
+            // Giro animado tipo saludo/giro al saltar o interactuar
+            if (this.appealSpinTime > 0) {
+                this.appealSpinTime -= dt;
+                this.placedModel.rotation.y += dt * 12 * this.physics.exaggeration;
+            }
+            
+            // Respiración ociosa (idle breathing)
+            if (this.physics.principles.appeal && !this.physics.isSimulating && !this.physics.isAnticipating && !this.isDragging) {
+                const breatheTime = time * 2.5;
+                appealScaleY = 1.0 + 0.025 * Math.sin(breatheTime) * this.physics.exaggeration;
+                appealScaleXZ = 1.0 / Math.sqrt(appealScaleY);
+            }
+        }
+
+        // 7. Aplicar Squash & Stretch visual (Animación física elástica) y Deformación
         if (this.placedModel) {
             let scaleY = 1.0;
             let scaleXZ = 1.0;
 
             if (!this.isDragging) {
-                // Físicas: Estiramiento en el aire por velocidad de caída/subida
-                if (this.physics.isSimulating && Math.abs(this.physics.velocityY) > 0.1) {
-                    const velFactor = Math.min(0.25, Math.abs(this.physics.velocityY) * 0.015);
-                    scaleY += velFactor;
-                    scaleXZ -= velFactor * 0.5;
-                }
+                if (this.physics.principles.squashStretch) {
+                    // Si está en anticipación, usar squash de compresión previa
+                    if (this.physics.isAnticipating) {
+                        scaleY = this.physics.anticipationSquash;
+                        scaleXZ = 1.0 / Math.sqrt(scaleY);
+                    } else if (this.physics.isSimulating && Math.abs(this.physics.velocityY) > 0.1) {
+                        // Estiramiento vertical en caída libre por velocidad
+                        const velFactor = Math.min(0.25, Math.abs(this.physics.velocityY) * 0.015) * this.physics.exaggeration;
+                        scaleY += velFactor;
+                        scaleXZ -= velFactor * 0.5;
+                    }
 
-                // Físicas: Aplastamiento elástico al colisionar con el suelo (efecto gelatina)
-                if (this.squashAmount > 0.0) {
-                    this.squashTimer += dt;
-                    const decay = Math.exp(-8 * this.squashTimer); // Amortiguación
-                    const osc = Math.cos(22 * this.squashTimer);   // Frecuencia
-                    const currentSquash = this.squashAmount * decay * osc;
+                    // Aplastamiento elástico al colisionar con el suelo (efecto gelatina)
+                    if (this.squashAmount > 0.0) {
+                        this.squashTimer += dt;
+                        const decay = Math.exp(-8 * this.squashTimer); // Amortiguación
+                        const osc = Math.cos(22 * this.squashTimer);   // Frecuencia
+                        const currentSquash = this.squashAmount * decay * osc;
 
-                    scaleY -= currentSquash;
-                    scaleXZ += currentSquash * 0.5;
+                        scaleY -= currentSquash;
+                        scaleXZ += currentSquash * 0.5;
 
-                    // Detener oscilación si el efecto es insignificante
-                    if (decay < 0.01) {
-                        this.squashAmount = 0.0;
+                        // Detener oscilación si el efecto es insignificante
+                        if (decay < 0.01) {
+                            this.squashAmount = 0.0;
+                        }
                     }
                 }
             }
@@ -1526,12 +2053,54 @@ class WebARApp {
                 }
             }
 
-            // Combinar con la deformación de volumen conservado del slider/pellizco e inflado
-            const finalScaleY = this.currentDeformation * scaleY * inflateScaleY;
-            const finalScaleXZ = (1.0 / Math.sqrt(this.currentDeformation)) * scaleXZ * inflateScaleXZ;
+            // Combinar con la deformación de volumen conservado del slider/pellizco, respiración e inflado
+            const finalScaleY = this.currentDeformation * scaleY * inflateScaleY * appealScaleY;
+            const finalScaleXZ = (1.0 / Math.sqrt(this.currentDeformation)) * scaleXZ * inflateScaleXZ * appealScaleXZ;
 
-            // Escalar el grupo colocado
+            // 8. Acción Continuada (Follow Through): Deformación por corte (shearing)
+            let shearX = 0;
+            let shearZ = 0;
+
+            if (this.physics.principles.followThrough && !this.isDragging) {
+                const currentPos = this.placedModel.position.clone();
+                const deltaX = currentPos.x - this.lastPosition.x;
+                const deltaZ = currentPos.z - this.lastPosition.z;
+                this.lastPosition.copy(currentPos);
+
+                const speedLimit = 6.0;
+                const vx = Math.max(-speedLimit, Math.min(speedLimit, deltaX / Math.max(0.001, dt)));
+                const vz = Math.max(-speedLimit, Math.min(speedLimit, deltaZ / Math.max(0.001, dt)));
+
+                // Filtro paso bajo para suavizar movimientos rápidos
+                this.horizontalVelocity.x = THREE.MathUtils.lerp(this.horizontalVelocity.x, vx, 0.15);
+                this.horizontalVelocity.z = THREE.MathUtils.lerp(this.horizontalVelocity.z, vz, 0.15);
+
+                // Corte opuesto a la velocidad horizontal
+                shearX = -this.horizontalVelocity.x * 0.065 * this.physics.exaggeration;
+                shearZ = -this.horizontalVelocity.z * 0.065 * this.physics.exaggeration;
+            } else {
+                this.lastPosition.copy(this.placedModel.position);
+            }
+
+            // Aplicar matriz local manual para deformaciones complejas (corte lateral) en GPU
+            this.placedModel.matrixAutoUpdate = false;
             this.placedModel.scale.set(finalScaleXZ, finalScaleY, finalScaleXZ);
+            this.placedModel.updateMatrix();
+
+            // Modificar elementos de matriz para simular flexión (Shearing)
+            if (this.physics.principles.followThrough) {
+                this.placedModel.matrix.elements[4] = shearX; // Shear X por Y
+                this.placedModel.matrix.elements[6] = shearZ; // Shear Z por Y
+            }
+        }
+
+        // 9. Sacudida de Cámara (Staging - Impact Camera Shake)
+        if (this.cameraShakeTime > 0) {
+            this.cameraShakeTime -= dt;
+            const shake = this.cameraShakeIntensity * (this.cameraShakeTime / 0.22);
+            this.camera.position.x += (Math.random() - 0.5) * shake;
+            this.camera.position.y += (Math.random() - 0.5) * shake;
+            this.camera.position.z += (Math.random() - 0.5) * shake;
         }
 
         // 3. Renderizar la escena

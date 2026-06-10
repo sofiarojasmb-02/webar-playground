@@ -13,10 +13,13 @@ class MeshDeformer {
      * Aplica deformación directa sobre los vértices del modelo.
      * Estira o comprime verticalmente relativo a la base del objeto,
      * y aplica la escala inversa en los ejes horizontales para conservar volumen.
+     * Además, aplica una deformación por corte (shear) lateral para simular retraso físico (Follow Through).
      * @param {THREE.Object3D} model - El modelo a deformar
      * @param {number} factorY - Factor de deformación (1.0 = original, >1.0 = estirado, <1.0 = comprimido)
+     * @param {number} shearX - Ángulo/factor de corte lateral en el eje X
+     * @param {number} shearZ - Ángulo/factor de corte lateral en el eje Z
      */
-    applyDeformation(model, factorY) {
+    applyDeformation(model, factorY, shearX = 0, shearZ = 0) {
         if (!model) return;
 
         // 1. Obtener la caja delimitadora (Bounding Box) del modelo para calcular la base (yMin)
@@ -72,6 +75,11 @@ class MeshDeformer {
                     
                     tempVertex.x = centerX + (tempVertex.x - centerX) * horizontalScale;
                     tempVertex.z = centerZ + (tempVertex.z - centerZ) * horizontalScale;
+
+                    // Aplicar deformación por corte (Shear) para Follow Through
+                    // El corte es proporcional a la altura respecto a la base (dy)
+                    tempVertex.x += dy * shearX;
+                    tempVertex.z += dy * shearZ;
 
                     // Transformar de vuelta al espacio local de la malla
                     tempVertex.applyMatrix4(worldToLocal);

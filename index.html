@@ -120,114 +120,221 @@
                 </div>
             </div>
 
-            <!-- SECCIÓN 2: Panel de Interacciones (Cuadrícula de 2 columnas) -->
-            <div class="controls-layout">
-                
-                <!-- Tarjeta de Físicas y Rebote -->
-                <div class="control-card">
-                    <div class="drawer-section-title" style="border-left-color: var(--color-secondary);">Físicas de Rebote</div>
-                    
-                    <div class="slider-group">
-                        <div class="slider-label">
-                            <span>Gravedad</span>
-                            <span id="val-gravity" class="slider-value">9.8 m/s²</span>
-                        </div>
-                        <input type="range" id="slider-gravity" min="0" max="25" step="0.5" value="9.8">
-                    </div>
+            <!-- SECCIÓN 2: Selector de Pestañas (Tabs) -->
+            <div class="drawer-tabs" style="display: flex; gap: 10px; border-bottom: 1px solid var(--border-glass); padding-bottom: 10px; margin-bottom: 10px; width: 100%;">
+                <button id="tab-btn-standard" class="drawer-tab active" data-tab="standard" style="background: transparent; border: none; font-family: var(--font-header); font-size: 0.75rem; color: var(--text-muted); cursor: pointer; padding: 6px 12px; border-radius: 8px; transition: all 0.2s; text-transform: uppercase; letter-spacing: 1px;">Físicas & Material</button>
+                <button id="tab-btn-principles" class="drawer-tab" data-tab="principles" style="background: transparent; border: none; font-family: var(--font-header); font-size: 0.75rem; color: var(--text-muted); cursor: pointer; padding: 6px 12px; border-radius: 8px; transition: all 0.2s; text-transform: uppercase; letter-spacing: 1px;">12 Principios</button>
+            </div>
 
-                    <div class="slider-group">
-                        <div class="slider-label">
-                            <span>Elasticidad (Rebote)</span>
-                            <span id="val-elasticity" class="slider-value">60%</span>
-                        </div>
-                        <input type="range" id="slider-elasticity" min="0" max="0.95" step="0.05" value="0.6">
-                    </div>
-
-                    <div class="slider-group">
-                        <div class="slider-label">
-                            <span>Altura de Caída</span>
-                            <span id="val-height" class="slider-value">1.2 m</span>
-                        </div>
-                        <input type="range" id="slider-height" min="0.2" max="3.0" step="0.1" value="1.2">
-                    </div>
-
-                    <div class="slider-group">
-                        <div class="slider-label">
-                            <span>Masa</span>
-                            <span id="val-mass" class="slider-value">1.0 kg</span>
-                        </div>
-                        <input type="range" id="slider-mass" min="0.1" max="10.0" step="0.1" value="1.0">
-                    </div>
-
-                    <div class="slider-group">
-                        <div class="slider-label">
-                            <span>Fricción (Aire)</span>
-                            <span id="val-friction" class="slider-value">0.1</span>
-                        </div>
-                        <input type="range" id="slider-friction" min="0.0" max="4.0" step="0.1" value="0.1">
-                    </div>
-
-                    <button id="btn-drop" class="btn-primary" style="margin-top: auto; background: linear-gradient(135deg, var(--color-secondary), var(--color-accent)); box-shadow: var(--shadow-neon-cyan);">
-                        Ejecutar Física
-                    </button>
-                </div>
-
-                <!-- Tarjeta de Deformación y Estilizado -->
-                <div class="control-card">
-                    <div class="drawer-section-title">Estilo y Deformación</div>
-
-                    <div class="slider-group">
-                        <div class="slider-label">
-                            <span>Estirar / Comprimir Y</span>
-                            <span id="val-deform" class="slider-value">1.0 (Original)</span>
-                        </div>
-                        <input type="range" id="slider-deform" min="0.4" max="2.2" step="0.05" value="1.0">
-                    </div>
-
-                    <div class="slider-group">
-                        <div class="slider-label">
-                            <span>Material - Rugosidad</span>
-                            <span id="val-roughness" class="slider-value">40%</span>
-                        </div>
-                        <input type="range" id="slider-roughness" min="0.0" max="1.0" step="0.05" value="0.4">
-                    </div>
-
-                    <div class="slider-group">
-                        <div class="slider-label">
-                            <span>Material - Metalizado</span>
-                            <span id="val-metalness" class="slider-value">80%</span>
-                        </div>
-                        <input type="range" id="slider-metalness" min="0.0" max="1.0" step="0.05" value="0.8">
-                    </div>
-
-                    <div class="material-select-group" style="margin-top: 10px; display: flex; flex-direction: column; gap: 6px; width: 100%;">
-                        <span style="font-size: 0.75rem; color: var(--text-muted);">Tipo de Material:</span>
-                        <select id="select-material-type" style="width: 100%; background: rgba(5, 5, 21, 0.6); border: 1px solid var(--border-glass); border-radius: 8px; padding: 8px 10px; color: var(--text-light); font-size: 0.75rem; outline: none; cursor: pointer; backdrop-filter: blur(5px);">
-                            <option value="solid" selected>Sólido (Estándar)</option>
-                            <option value="aluminum">Aluminio (Metal)</option>
-                            <option value="glass">Vidrio (Refractivo)</option>
-                            <option value="wood">Madera (Mate)</option>
-                            <option value="ceramic">Cerámica Porosa</option>
-                        </select>
-                    </div>
-
-                    <div class="color-picker-container" style="margin-top: auto; display: flex; flex-direction: column; gap: 8px; align-items: flex-start;">
-                        <span style="font-size: 0.75rem; color: var(--text-muted);">Color del Material:</span>
-                        <div style="display: flex; align-items: center; gap: 12px; width: 100%;">
-                            <div class="color-presets" style="display: flex; gap: 8px;">
-                                <div class="color-chip active" style="background-color: #8b5cf6;" data-color="#8b5cf6" title="Morado Eléctrico"></div>
-                                <div class="color-chip" style="background-color: #06b6d4;" data-color="#06b6d4" title="Cian Neón"></div>
-                                <div class="color-chip" style="background-color: #ef4444;" data-color="#ef4444" title="Rojo Vibrante"></div>
-                                <div class="color-chip" style="background-color: #eab308;" data-color="#eab308" title="Oro Sol"></div>
-                                <div class="color-chip" style="background-color: #10b981;" data-color="#10b981" title="Verde Esmeralda"></div>
+            <!-- PANEL 1: Controles Estándar -->
+            <div id="panel-standard" class="tab-panel active" style="width: 100%;">
+                <div class="controls-layout">
+                    <!-- Tarjeta de Físicas y Rebote -->
+                    <div class="control-card">
+                        <div class="drawer-section-title" style="border-left-color: var(--color-secondary);">Físicas de Rebote</div>
+                        
+                        <div class="slider-group">
+                            <div class="slider-label">
+                                <span>Gravedad</span>
+                                <span id="val-gravity" class="slider-value">9.8 m/s²</span>
                             </div>
-                            <div class="color-dot-picker" id="color-dot-container" style="background-color: #8b5cf6; margin-left: auto;">
-                                <input type="color" id="color-picker" value="#8b5cf6">
+                            <input type="range" id="slider-gravity" min="0" max="25" step="0.5" value="9.8">
+                        </div>
+
+                        <div class="slider-group">
+                            <div class="slider-label">
+                                <span>Elasticidad (Rebote)</span>
+                                <span id="val-elasticity" class="slider-value">60%</span>
+                            </div>
+                            <input type="range" id="slider-elasticity" min="0" max="0.95" step="0.05" value="0.6">
+                        </div>
+
+                        <div class="slider-group">
+                            <div class="slider-label">
+                                <span>Altura de Caída</span>
+                                <span id="val-height" class="slider-value">1.2 m</span>
+                            </div>
+                            <input type="range" id="slider-height" min="0.2" max="3.0" step="0.1" value="1.2">
+                        </div>
+
+                        <div class="slider-group">
+                            <div class="slider-label">
+                                <span>Masa</span>
+                                <span id="val-mass" class="slider-value">1.0 kg</span>
+                            </div>
+                            <input type="range" id="slider-mass" min="0.1" max="10.0" step="0.1" value="1.0">
+                        </div>
+
+                        <div class="slider-group">
+                            <div class="slider-label">
+                                <span>Fricción (Aire)</span>
+                                <span id="val-friction" class="slider-value">0.1</span>
+                            </div>
+                            <input type="range" id="slider-friction" min="0.0" max="4.0" step="0.1" value="0.1">
+                        </div>
+
+                        <button id="btn-drop" class="btn-primary" style="margin-top: auto; background: linear-gradient(135deg, var(--color-secondary), var(--color-accent)); box-shadow: var(--shadow-neon-cyan);">
+                            Ejecutar Física
+                        </button>
+                    </div>
+
+                    <!-- Tarjeta de Deformación y Estilizado -->
+                    <div class="control-card">
+                        <div class="drawer-section-title">Estilo y Deformación</div>
+
+                        <div class="slider-group">
+                            <div class="slider-label">
+                                <span>Estirar / Comprimir Y</span>
+                                <span id="val-deform" class="slider-value">1.0 (Original)</span>
+                            </div>
+                            <input type="range" id="slider-deform" min="0.4" max="2.2" step="0.05" value="1.0">
+                        </div>
+
+                        <div class="slider-group">
+                            <div class="slider-label">
+                                <span>Material - Rugosidad</span>
+                                <span id="val-roughness" class="slider-value">40%</span>
+                            </div>
+                            <input type="range" id="slider-roughness" min="0.0" max="1.0" step="0.05" value="0.4">
+                        </div>
+
+                        <div class="slider-group">
+                            <div class="slider-label">
+                                <span>Material - Metalizado</span>
+                                <span id="val-metalness" class="slider-value">80%</span>
+                            </div>
+                            <input type="range" id="slider-metalness" min="0.0" max="1.0" step="0.05" value="0.8">
+                        </div>
+
+                        <div class="material-select-group" style="margin-top: 10px; display: flex; flex-direction: column; gap: 6px; width: 100%;">
+                            <span style="font-size: 0.75rem; color: var(--text-muted);">Tipo de Material:</span>
+                            <select id="select-material-type" style="width: 100%; background: rgba(5, 5, 21, 0.6); border: 1px solid var(--border-glass); border-radius: 8px; padding: 8px 10px; color: var(--text-light); font-size: 0.75rem; outline: none; cursor: pointer; backdrop-filter: blur(5px);">
+                                <option value="solid" selected>Sólido (Estándar)</option>
+                                <option value="aluminum">Aluminio (Metal)</option>
+                                <option value="glass">Vidrio (Refractivo)</option>
+                                <option value="wood">Madera (Mate)</option>
+                                <option value="ceramic">Cerámica Porosa</option>
+                            </select>
+                        </div>
+
+                        <div class="color-picker-container" style="margin-top: auto; display: flex; flex-direction: column; gap: 8px; align-items: flex-start;">
+                            <span style="font-size: 0.75rem; color: var(--text-muted);">Color del Material:</span>
+                            <div style="display: flex; align-items: center; gap: 12px; width: 100%;">
+                                <div class="color-presets" style="display: flex; gap: 8px;">
+                                    <div class="color-chip active" style="background-color: #8b5cf6;" data-color="#8b5cf6" title="Morado Eléctrico"></div>
+                                    <div class="color-chip" style="background-color: #06b6d4;" data-color="#06b6d4" title="Cian Neón"></div>
+                                    <div class="color-chip" style="background-color: #ef4444;" data-color="#ef4444" title="Rojo Vibrante"></div>
+                                    <div class="color-chip" style="background-color: #eab308;" data-color="#eab308" title="Oro Sol"></div>
+                                    <div class="color-chip" style="background-color: #10b981;" data-color="#10b981" title="Verde Esmeralda"></div>
+                                </div>
+                                <div class="color-dot-picker" id="color-dot-container" style="background-color: #8b5cf6; margin-left: auto;">
+                                    <input type="color" id="color-picker" value="#8b5cf6">
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
+            </div>
 
+            <!-- PANEL 2: Controles 12 Principios -->
+            <div id="panel-principles" class="tab-panel" style="width: 100%; display: none;">
+                <div class="controls-layout">
+                    <!-- Tarjeta de Configuración Global -->
+                    <div class="control-card">
+                        <div class="drawer-section-title" style="border-left-color: var(--color-secondary);">Físicas de Animación</div>
+                        
+                        <div class="slider-group">
+                            <div class="slider-label">
+                                <span>Ritmo / Timing Preset</span>
+                            </div>
+                            <select id="select-timing-preset" style="width: 100%; background: rgba(5, 5, 21, 0.6); border: 1px solid var(--border-glass); border-radius: 8px; padding: 8px 10px; color: var(--text-light); font-size: 0.75rem; outline: none; cursor: pointer; backdrop-filter: blur(5px);">
+                                <option value="rubber" selected>Pelota de Goma (Elástica)</option>
+                                <option value="heavy">Bola de Boliche (Pesada)</option>
+                                <option value="jelly">Gelatina (Orgánica/Wobbly)</option>
+                                <option value="feather">Pluma (Ligera/Aire)</option>
+                                <option value="custom">Manual (Personalizado)</option>
+                            </select>
+                        </div>
+
+                        <div class="slider-group">
+                            <div class="slider-label">
+                                <span>Modo de Movimiento</span>
+                            </div>
+                            <select id="select-motion-mode" style="width: 100%; background: rgba(5, 5, 21, 0.6); border: 1px solid var(--border-glass); border-radius: 8px; padding: 8px 10px; color: var(--text-light); font-size: 0.75rem; outline: none; cursor: pointer; backdrop-filter: blur(5px);">
+                                <option value="straight" selected>Acción Directa (Físicas Reales)</option>
+                                <option value="pose">Pose a Pose (Interp. Bezier)</option>
+                            </select>
+                        </div>
+
+                        <div class="slider-group">
+                            <div class="slider-label">
+                                <span>Exageración</span>
+                                <span id="val-exaggeration" class="slider-value">1.0x (Normal)</span>
+                            </div>
+                            <input type="range" id="slider-exaggeration" min="0.0" max="3.0" step="0.1" value="1.0">
+                        </div>
+                        
+                        <button id="btn-animate-trigger" class="btn-primary" style="margin-top: auto; background: linear-gradient(135deg, var(--color-primary), var(--color-accent)); box-shadow: var(--shadow-neon-purple);">
+                            Ejecutar Animación
+                        </button>
+                    </div>
+
+                    <!-- Tarjeta de Interruptores de los 12 Principios -->
+                    <div class="control-card">
+                        <div class="drawer-section-title">Interruptores de Principios</div>
+                        
+                        <div class="checkbox-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.7rem; height: 100%; align-content: start; max-height: 250px; overflow-y: auto;">
+                            <label class="check-label" style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text-light);" title="Squash & Stretch: Deformación por velocidad e impacto">
+                                <input type="checkbox" id="check-squash-stretch" checked>
+                                <span>1. Squash & Stretch</span>
+                            </label>
+                            <label class="check-label" style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text-light);" title="Anticipation: Preparación y compresión antes de saltar">
+                                <input type="checkbox" id="check-anticipation" checked>
+                                <span>2. Anticipación</span>
+                            </label>
+                            <label class="check-label" style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text-light);" title="Staging: Foco con luces de realce y sacudidas de cámara">
+                                <input type="checkbox" id="check-staging" checked>
+                                <span>3. Puesta en Escena</span>
+                            </label>
+                            <label class="check-label" style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text-light);" title="Pose to Pose: Muestra trayectorias y fantasmas de poses key">
+                                <input type="checkbox" id="check-pose-ghosts" checked>
+                                <span>4. Poses Fantasma</span>
+                            </label>
+                            <label class="check-label" style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text-light);" title="Follow Through: Retraso físico (deformación de flexión/corte) en partes superiores">
+                                <input type="checkbox" id="check-follow-through" checked>
+                                <span>5. Acción Continuada</span>
+                            </label>
+                            <label class="check-label" style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text-light);" title="Slow In & Slow Out: Retraso acentuado cerca del ápice">
+                                <input type="checkbox" id="check-slow-in-out" checked>
+                                <span>6. Frenado Suave</span>
+                            </label>
+                            <label class="check-label" style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text-light);" title="Arcs: Trayectoria de salto parabólica en lugar de lineal">
+                                <input type="checkbox" id="check-arcs" checked>
+                                <span>7. Movimiento en Arcos</span>
+                            </label>
+                            <label class="check-label" style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text-light);" title="Secondary Action: Efectos de partículas en impacto y giros secundarios">
+                                <input type="checkbox" id="check-secondary-action" checked>
+                                <span>8. Acción Secundaria</span>
+                            </label>
+                            <label class="check-label" style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text-light);" title="Timing: Peso e inercia dinámicos según el tipo de objeto">
+                                <input type="checkbox" id="check-timing" checked>
+                                <span>9. Ritmo / Timing</span>
+                            </label>
+                            <label class="check-label" style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text-light);" title="Exaggeration: Multiplica las escalas físicas y deformaciones a nivel caricatura">
+                                <input type="checkbox" id="check-exaggeration" checked>
+                                <span>10. Exageración</span>
+                            </label>
+                            <label class="check-label" style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text-light);" title="Solid Drawing: Jaula de alambre 3D, vector de gravedad y métricas flotantes">
+                                <input type="checkbox" id="check-solid-drawing" checked>
+                                <span>11. Dibujo Sólido</span>
+                            </label>
+                            <label class="check-label" style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text-light);" title="Appeal: Respiración ociosa del modelo y giro animado al colocarlo/tocarlo">
+                                <input type="checkbox" id="check-appeal" checked>
+                                <span>12. Personalidad (Appeal)</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
             </div>
 
         </div>
