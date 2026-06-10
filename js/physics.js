@@ -36,18 +36,18 @@ class PhysicsEngine {
         
         // Interruptores de los 12 Principios
         this.principles = {
-            squashStretch: true,
-            anticipation: true,
-            staging: true,
-            poseGhosts: true,
-            followThrough: true,
-            slowInOut: true,
-            arcs: true,
-            secondaryAction: true,
-            timing: true,
-            exaggeration: true,
-            solidDrawing: true,
-            appeal: true
+            squashStretch: false,
+            anticipation: false,
+            staging: false,
+            poseGhosts: false,
+            followThrough: false,
+            slowInOut: false,
+            arcs: false,
+            secondaryAction: false,
+            timing: false,
+            exaggeration: false,
+            solidDrawing: false,
+            appeal: false
         };
         this.exaggeration = 1.0;   // Multiplicador de exageración (0.0 a 3.0)
         this.motionMode = 'straight'; // 'straight' (físicas directas) o 'pose' (pose a pose)

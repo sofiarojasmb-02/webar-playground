@@ -6,7 +6,7 @@
 
 :root {
     --bg-dark: #050515;
-    --bg-drawer: rgba(13, 14, 45, 0.75);
+    --bg-drawer: rgba(13, 14, 45, 0.35);
     --border-glass: rgba(139, 92, 246, 0.2);
     --color-primary: #8b5cf6; /* Morado Eléctrico */
     --color-secondary: #06b6d4; /* Cian Neón */
