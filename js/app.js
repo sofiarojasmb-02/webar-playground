@@ -807,6 +807,9 @@ class WebARApp {
                 if (timeDiff < 300 && intersects.length > 0) {
                     // Doble toque en el modelo -> Salto e inflado de físicas elástico
                     this.isDoubleTap = true;
+                    if (this.placedModel) {
+                        this.physics.setStartPosition(this.placedModel.position.x, this.placedModel.position.z);
+                    }
                     this.physics.applyImpulse(6.0); // Impulso hacia arriba (m/s)
                     this.inflateAmount = 0.5;       // Iniciar inflado al 50%
                     this.inflateTimer = 0.0;        // Reiniciar oscilación
@@ -1176,7 +1179,8 @@ class WebARApp {
             this.showToast('¡Lanzando salto vertical!');
         }
 
-        // Ejecutar impulso en Y
+        // Ejecutar impulso en Y (la posición XZ ya fue sincronizada al detectar la posición del modelo)
+        this.physics.setStartPosition(this.placedModel.position.x, this.placedModel.position.z);
         this.physics.applyImpulse(jumpVelY, velX, velZ);
     }
 
@@ -1339,12 +1343,17 @@ class WebARApp {
         } else if (extension === 'stl') {
             this.stlLoader.load(url, (geometry) => {
                 // STL cargador devuelve solo la geometría, creamos una malla
+                // Computar normales para asegurar iluminación correcta
+                geometry.computeVertexNormals();
                 const material = new THREE.MeshStandardMaterial({
                     color: this.currentColor,
                     roughness: this.roughness,
-                    metalness: this.metalness
+                    metalness: this.metalness,
+                    side: THREE.DoubleSide
                 });
                 const mesh = new THREE.Mesh(geometry, material);
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
                 onModelLoaded(mesh);
             }, undefined, onLoadError);
         }
@@ -1375,6 +1384,7 @@ class WebARApp {
 
             // Re-ejecutar física si estaba corriendo
             if (this.physics.isSimulating) {
+                this.physics.setStartPosition(this.placedModel.position.x, this.placedModel.position.z);
                 this.physics.startDrop(this.physics.groundY);
             }
         }
@@ -1408,6 +1418,8 @@ class WebARApp {
         this.updateMaterialType();
 
         // Iniciar rebote físico dinámico desde la altura de caída configurada
+        // IMPORTANTE: sincronizar posición XZ para evitar teletransportación al origen
+        this.physics.setStartPosition(position.x, position.z);
         this.physics.startDrop(position.y);
 
         this.showToast('Modelo colocado en la superficie.');
@@ -1439,6 +1451,8 @@ class WebARApp {
         // Usar la Y del suelo donde está colocado el modelo, sin moverlo de posición
         const floorY = this.placedModel.position.y;
 
+        // Sincronizar posición XZ antes de re-ejecutar la física
+        this.physics.setStartPosition(this.placedModel.position.x, this.placedModel.position.z);
         this.physics.startDrop(floorY);
         this.showToast('Físicas ejecutadas.');
     }

@@ -82,6 +82,18 @@ class PhysicsEngine {
     }
 
     /**
+     * Sincroniza la posición horizontal del motor de físicas con la posición real del modelo.
+     * DEBE llamarse antes de startDrop() o applyImpulse() para evitar que el modelo
+     * se teletransporte al origen del mundo (0,0,0).
+     * @param {number} x - Coordenada X del modelo en el mundo
+     * @param {number} z - Coordenada Z del modelo en el mundo
+     */
+    setStartPosition(x, z) {
+        this.positionX = isNaN(x) ? 0.0 : x;
+        this.positionZ = isNaN(z) ? 0.0 : z;
+    }
+
+    /**
      * Inicia una caída libre desde la altura especificada.
      * @param {number} groundY - Coordenada Y del suelo sobre el que rebotar
      */
@@ -101,14 +113,14 @@ class PhysicsEngine {
             this.velocityY = 0.0;
             this.velocityX = 0.0;
             this.velocityZ = 0.0;
-            console.log(`Anticipación de caída iniciada. Altura objetivo: ${targetPosY}m`);
+            console.log(`Anticipación de caída iniciada. Altura objetivo: ${targetPosY}m, Posición XZ: (${this.positionX.toFixed(3)}, ${this.positionZ.toFixed(3)})`);
         } else {
             this.positionY = targetPosY;
             this.velocityY = 0.0;
             this.velocityX = 0.0;
             this.velocityZ = 0.0;
             this.isSimulating = true;
-            console.log(`Físicas iniciadas. Altura de caída: ${this.positionY}m, Altura suelo: ${this.groundY}m`);
+            console.log(`Físicas iniciadas. Altura de caída: ${this.positionY}m, Suelo: ${this.groundY}m, Pos XZ: (${this.positionX.toFixed(3)}, ${this.positionZ.toFixed(3)})`);
         }
     }
 
@@ -235,8 +247,10 @@ class PhysicsEngine {
             this.positionX += this.velocityX * actualDt;
             this.positionZ += this.velocityZ * actualDt;
         } else {
+            // Sin arcos: mantener la posición horizontal fija (no mover a 0,0)
             this.velocityX = 0.0;
             this.velocityZ = 0.0;
+            // positionX y positionZ NO se modifican para preservar la ubicación del modelo
         }
 
         // Evitar NaNs accidentales
