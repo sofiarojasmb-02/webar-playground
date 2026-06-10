@@ -602,8 +602,8 @@ body.ar-active #settings-button-container {
     top: calc(50px + env(safe-area-inset-top));
     left: 50%;
     transform: translateX(-50%) translateY(-100px);
-    background: rgba(239, 68, 68, 0.9);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(139, 92, 246, 0.92);   /* morado principal */
+    border: 1px solid rgba(167, 139, 250, 0.35);
     border-radius: 10px;
     padding: 12px 24px;
     color: white;
@@ -611,7 +611,7 @@ body.ar-active #settings-button-container {
     font-family: var(--font-header);
     z-index: 100;
     transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 4px 15px rgba(109, 40, 217, 0.35);
     text-align: center;
 }
 
@@ -620,6 +620,17 @@ body.ar-active #settings-button-container {
 }
 #toast-notification.info {
     background: rgba(6, 182, 212, 0.9);
+    box-shadow: 0 4px 15px rgba(6, 182, 212, 0.3);
+}
+#toast-notification.warning {
+    background: rgba(109, 40, 217, 0.92);   /* morado más oscuro */
+    border-color: rgba(167, 139, 250, 0.5);
+    box-shadow: 0 4px 15px rgba(109, 40, 217, 0.4);
+}
+#toast-notification.error {
+    background: rgba(124, 58, 237, 0.95);   /* morado intenso */
+    border-color: rgba(196, 181, 253, 0.5);
+    box-shadow: 0 4px 20px rgba(109, 40, 217, 0.5);
 }
 
 /* Chips Rápidos de Selección de Color */
